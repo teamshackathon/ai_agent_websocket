@@ -1,0 +1,55 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "mainブランチから新規ブランチ作成",
+            "type": "shell",
+            "command": "git checkout main && git pull && git checkout -b ${input:branch}",
+            "args": [],
+            "problemMatcher": [],
+        },
+        {
+            "label": "git fetch origin",
+            "type": "shell",
+            "command": "git fetch origin",
+            "args": [],
+            "problemMatcher": [],
+        },
+        {
+            "label": "git commit (変更をコミットしてプッシュできる状態にします)",
+            "type": "shell",
+            "command": "git add . && git commit -m \"${input:message}\"",
+            "args": [],
+            "problemMatcher": [],
+        },
+        {
+            "label": "git push (現在ブランチをプッシュします。未コミットがないか確認すること。)",
+            "type": "shell",
+            "command": "git push -u origin HEAD",
+            "args": [],
+            "problemMatcher": [],
+            "dependsOrder": "sequence",
+        },
+        {
+            "label": "stgにプルリクエストを作成",
+            "type": "shell",
+            "command": "pull_request",
+            "args": [],
+            "problemMatcher": [],
+        }
+    ],
+    "inputs": [
+        {
+            "type": "promptString",
+            "id": "message",
+            "description": "コミット変更内容を入力してください。",
+            "default": ""
+        },
+        {
+            "type": "promptString",
+            "id": "branch",
+            "description": "ブランチ名を入力してください。",
+            "default": ""
+        }
+    ]
+}
