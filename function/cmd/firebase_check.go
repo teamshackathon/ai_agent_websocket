@@ -84,8 +84,8 @@ func getDocumentFromFirestore(idToken, docPath string) (map[string]interface{}, 
 }
 
 func main() {
-	email := "admin@manabiya.ai.com"
-	password := "Manab1yaa1.Admin"
+	email := "ai.agent@manabiya.ai.com"
+	password := "Manab1yaa1.aiagent"
 
 	// Firebase Authentication Emulator にログイン
 	signInResp, err := signIn(email, password)
