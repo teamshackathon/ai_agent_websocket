@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  function:
+    build: ./function
+    container_name: function
+    env_file:
+      - ./function/.env.develop
+    ports:
+      - "3002:3002"
+
+  webui:
+    build: ./webui
+    container_name: webui
+    depends_on:
+      - function
+    ports:
+      - "3000:3000"  
+

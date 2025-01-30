@@ -1,0 +1,10 @@
+.git
+.idea
+.gcloudignore
+.env.production
+.env.develop
+README.md
+PROMPT.md
+Dockerfile
+cmd/
+cert/
