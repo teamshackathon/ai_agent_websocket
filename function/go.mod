@@ -6,6 +6,7 @@ toolchain go1.22.11
 
 require (
 	cloud.google.com/go/speech v1.26.0
+	cloud.google.com/go/vertexai v0.13.3
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.3
 	google.golang.org/genproto v0.0.0-20250115164207-1a7da9e5054f
@@ -13,9 +14,11 @@ require (
 
 require (
 	cloud.google.com/go v0.118.0 // indirect
+	cloud.google.com/go/aiplatform v1.70.0 // indirect
 	cloud.google.com/go/auth v0.13.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.6 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
+	cloud.google.com/go/iam v1.3.1 // indirect
 	cloud.google.com/go/longrunning v0.6.4 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect

@@ -1,0 +1,10 @@
+# An example requirements file. If your function has other dependencies,
+# add them below
+functions-framework==3.*
+google-cloud-storage==2.7.0
+flask==2.0.1
+werkzeug==2.0.1
+langchain-core>=0.3.25
+langchain-google-genai==2.0.3
+langchain-community==0.3.0
+google-generativeai==0.8.4

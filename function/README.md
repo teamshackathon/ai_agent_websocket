@@ -34,6 +34,14 @@ GCPの以下のサービスを有効にします。
 
 認証情報に`GOOGLE_SERVICE_ACCOUNT`のサービスアカウントが含まれているか確認。
 
+### サービスアカウントに AI Platform の権限を与える
+
+```bash
+gcloud projects add-iam-policy-binding $(Project ID) \
+--member="serviceAccount:$(Service Account Mail Address)" \
+--role="roles/aiplatform.user"
+```
+
 ### Google Cloud Project の設定
 ```bash
 gcloud config set project $(Project ID)

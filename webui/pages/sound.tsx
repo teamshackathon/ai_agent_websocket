@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [audioURLs, setAudioURLs] = useState<string[]>([]); // 保存した音声データのURL
+  const [audioTexts, setAudioTexts] = useState<string[]>([]); // 保存した音声データのテキスト
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]); // 録音データのチャンクを保持
   const socketRef = useRef<WebSocket | null>(null);
@@ -16,9 +17,13 @@ export default function Home() {
 
   useEffect(() => {
     // WebSocket接続
-    const socket = new WebSocket('ws://localhost:3002');
+    const socket = new WebSocket(process.env.NEXT_PUBLIC_WEBSOCKET_URL || '');
     socket.onopen = () => console.log('WebSocket connected');
     socket.onerror = (error) => console.error('WebSocket error:', error);
+    socket.onmessage = (event) => {
+      console.log('Message received from WebSocket:', event.data);
+      setAudioTexts((prev) => [...prev, event.data]);
+    };
     socketRef.current = socket;
 
     return () => {
@@ -152,16 +157,40 @@ export default function Home() {
     // ステートに保存（クライアントで再生可能にする）
     setAudioURLs((prev) => [...prev, audioURL]);
 
-    // WebSocket経由で送信
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(audioBlob); // Blob をWebSocketで送信
-      console.log('Audio data sent via WebSocket');
-    } else {
-      console.error('WebSocket is not open');
-    }
+    const promise = blobToBase64(audioBlob);
+    promise.then((base64Audio) => {
+      if(base64Audio) {
+        // WebSocket経由で送信
+        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+          socketRef.current.send(base64Audio); // base64Audio をWebSocketで送信
+          console.log('Audio data sent via WebSocket');
+        } else {
+          console.error('WebSocket is not open');
+        }
+      }
+    });
 
+    console.log('chunks close.');
     // チャンクをリセット
     audioChunksRef.current = [];
+  };
+
+  const blobToBase64 = async (blob: Blob): Promise<string | undefined> => {
+    const reader = new FileReader();
+
+    return new Promise((resolve, reject) => {
+      reader.onload = () => {
+        console.log('Encoding audio blob to Base64...');
+        resolve(reader.result?.toString().split(",")[1]);
+      };
+
+      reader.onerror = function (error) {
+        console.error('Error encoding audio blob to Base64:', error);
+        reject(error);
+      };
+
+      reader.readAsDataURL(blob); // BlobデータをBase64形式に変換
+    });
   };
 
   return (
@@ -182,6 +211,15 @@ export default function Home() {
                   <source src={url} type="audio/webm" />
                   お使いのブラウザはオーディオ再生をサポートしていません。
                 </audio>
+
+                <div>
+                  <textarea
+                      value={audioTexts[index] || ''}
+                      readOnly
+                      style={{width: '100%', height: '100px', marginTop: '10px'}}
+                      placeholder="音声に対して変換されたテキストがここに表示されます"
+                  />
+                </div>
               </div>
           ))}
         </div>

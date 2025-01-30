@@ -15,7 +15,7 @@ func main() {
 	r := mux.NewRouter()
 
 	// URIごとにハンドラを登録
-	r.PathPrefix("/").HandlerFunc(server.HandleWebSocket)
+	r.PathPrefix("/").HandlerFunc(server.Main)
 
 	// サーバーを起動
 	fmt.Println("Starting server on :3002")

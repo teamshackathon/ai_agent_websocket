@@ -1,0 +1,10 @@
+# misc
+.DS_Store
+.idea
+.venv
+
+__pycache__/
+
+/cert/authcation.json
+/cert/google_gemini.pem
+/cert/langchain.pem
