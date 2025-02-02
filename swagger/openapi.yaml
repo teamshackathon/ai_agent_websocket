@@ -1,0 +1,147 @@
+openapi: 3.0.0
+info:
+  version: 1.0.0
+  title: Manabiya AI API Document
+  description: This is Manabiya AI Agent API Document.
+servers:
+  - url: http://localhost:3001
+paths:
+  /:
+    get:
+      description: |
+        Display Hello AI
+      operationId: cmd_hello_ai
+      responses:
+        '200':
+          description: Outputs AI Agent's self-introduction text.
+          content:
+            plain/text:
+              example: Hello AI.
+  /create_resume:
+    get:
+      description: |
+        Create class resume data from textbook data.
+        Specify the target lesson.
+      operationId: cmd_create_resume
+      parameters:
+        - name: year
+          in: query
+          description: lesson year
+          required: true
+          style: form
+          schema:
+            type: string
+            example: 2025
+        - name: class
+          in: query
+          description: lesson class
+          required: true
+          style: form
+          schema:
+            type: string
+            example: 1-1
+        - name: subject
+          in: query
+          description: lesson subject
+          required: true
+          style: form
+          schema:
+            type: string
+            enum: [english, japanese, math, science, social]
+            example: english
+        - name: lesson_id
+          in: query
+          description: lesson id
+          required: true
+          schema:
+            type: string
+            example: ayiiF5ZAkPKCV6Y99Dau
+      responses:
+        '200':
+          description: Return resume data path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreResult'
+                
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /create_test:
+    get:
+      description: |
+        Create quizzes from textbook data and class audio data.
+      operationId: cmd_create_test
+      parameters:
+        - name: year
+          in: query
+          description: lesson year
+          required: true
+          style: form
+          schema:
+            type: string
+            example: 2025
+        - name: class
+          in: query
+          description: lesson class
+          required: true
+          style: form
+          schema:
+            type: string
+            example: 1-1
+        - name: subject
+          in: query
+          description: lesson subject
+          required: true
+          style: form
+          schema:
+            type: string
+            enum: [english, japanese, math, science, social]
+            example: english
+        - name: lesson_id
+          in: query
+          description: lesson id
+          required: true
+          schema:
+            type: string
+            example: ayiiF5ZAkPKCV6Y99Dau
+      responses:
+        '200':
+          description: Return test data path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreResult'
+                
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    StoreResult:
+      type: object
+      required:
+        - store_path
+      properties:
+        store_path:
+          type: string
+          description: Returns the Firestore path where resume data is stored.
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        type:
+          type: string
+        message:
+          type: string
+externalDocs:
+  description: Find out more about Swagger
+  url: http://swagger.io
