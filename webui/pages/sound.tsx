@@ -105,7 +105,7 @@ export default function Home() {
       silentStat.current = true;
     }
 
-// 無音状態が一定時間続いた場合（ここでは2秒間）
+    // 無音状態が一定時間続いた場合（ここでは2秒間）
     if (silentChunks.current > 20) {
       silentChunks.current = 0;
 

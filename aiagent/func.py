@@ -24,7 +24,7 @@ def hello_ai(request):
 
 
 @functions_framework.http
-def process_file(request):
+def create_resume(request):
     model = genai.GenerativeModel("gemini-2.0-flash-exp")
     blob_bytes = get_resource_bytes("textbook/20250118-002面-新婦人タブ２面.pdf")
     blob_bytes = b''.join(blob_bytes) if isinstance(blob_bytes, tuple) else blob_bytes
@@ -35,6 +35,7 @@ def process_file(request):
     - サブタイトルは先頭に`## `をつける
     - １文中の改行は削除する
     - 文先頭の空白の前で改行する
+    - PDFページ番号を<$ページ番号>の形式で出力する
     '''
     text = model.generate_content([{'mime_type': 'application/pdf', 'data': doc_data}, prompt]).text
 
