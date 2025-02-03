@@ -26,3 +26,13 @@
 
 Hello AI: [http://localhost:3001/](http://localhost:3001/)\
 教科書読込: [http://localhost:3001/process_file](http://localhost:3001/process_file)
+
+### デバック起動
+
+```bash
+export PYTHONPATH=. &&\
+export GOOGLE_API_KEY=$(cat cert/google_gemini.pem) &&\
+export LANGCHAIN_API_KEY=$(cat cert/langchain.pem) &&\
+export $(sed 's/host.docker.internal/localhost/g' .env.develop | xargs) &&\
+python cmd/main.py
+```
