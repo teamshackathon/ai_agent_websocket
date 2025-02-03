@@ -17,52 +17,36 @@ paths:
           content:
             plain/text:
               example: Hello AI.
-  /create_resume:
-    get:
+  /create_agenda:
+    post:
       description: |
         Create class resume data from textbook data.
         Specify the target lesson.
-      operationId: cmd_create_resume
-      parameters:
-        - name: year
-          in: query
-          description: lesson year
-          required: true
-          style: form
-          schema:
-            type: string
-            example: 2025
-        - name: class
-          in: query
-          description: lesson class
-          required: true
-          style: form
-          schema:
-            type: string
-            example: 1-1
-        - name: subject
-          in: query
-          description: lesson subject
-          required: true
-          style: form
-          schema:
-            type: string
-            enum: [english, japanese, math, science, social]
-            example: english
-        - name: lesson_id
-          in: query
-          description: lesson id
-          required: true
-          schema:
-            type: string
-            example: ayiiF5ZAkPKCV6Y99Dau
+      operationId: cmd_create_agenda
+      parameters: []
+      requestBody:
+        description: create agenda for lesson.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefrenceRequest'
+            example:
+              reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau"
+              start_page: 1
+              finish_page: 3
+              notice: ["nama.nama", "name.name", "name.name", "namae.nmamae"]
       responses:
         '200':
           description: Return resume data path.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoreResult'
+                $ref: '#/components/schemas/CreateResult'
+              example:
+                reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau"
+                feilds: {
+                  agenda: "agenda_draft"
+                }
                 
         default:
           description: unexpected error
@@ -70,70 +54,92 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /create_test:
-    get:
+  /create_questions:
+    post:
       description: |
         Create quizzes from textbook data and class audio data.
-      operationId: cmd_create_test
-      parameters:
-        - name: year
-          in: query
-          description: lesson year
-          required: true
-          style: form
-          schema:
-            type: string
-            example: 2025
-        - name: class
-          in: query
-          description: lesson class
-          required: true
-          style: form
-          schema:
-            type: string
-            example: 1-1
-        - name: subject
-          in: query
-          description: lesson subject
-          required: true
-          style: form
-          schema:
-            type: string
-            enum: [english, japanese, math, science, social]
-            example: english
-        - name: lesson_id
-          in: query
-          description: lesson id
-          required: true
-          schema:
-            type: string
-            example: ayiiF5ZAkPKCV6Y99Dau
+      operationId: cmd_create_questions
+      parameters: []
+      requestBody:
+        description: create questions after lesson.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefrenceRequest'
+            example:
+              reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau"
+              notice: ["nama.nama", "name.name", "name.name", "namae.nmamae"]
       responses:
         '200':
           description: Return test data path.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoreResult'
-                
+                $ref: '#/components/schemas/CreateResult'
+              example:
+                reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau"
+                feilds: {
+                  questions: "questions_draft"
+                }
         default:
-          description: unexpected error
+          description: unexpected error.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
 components:
   schemas:
-    StoreResult:
+    RefrenceRequest:
       type: object
       required:
-        - store_path
+        - reference
+        - start_page
+        - finish_page
       properties:
-        store_path:
+        reference:
           type: string
-          description: Returns the Firestore path where resume data is stored.
+          description: firestore reference path.
+          example: '2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau'
+        start_page:
+          type: integer
+          description: first page of lesson.
+        finish_page:
+          type: integer
+          description: last page of lesson.
+        notice:
+          type: array
+          description: list of notice user.name.
+          items:
+            type: string
+    CreateResult:
+      type: object
+      required:
+        - reference
+        - field
+      properties:
+        reference:
+          type: string
+          description: created data reference path.
+          example: '2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau'
+        field:
+          type: object
+          description: stored field names.
+          properties:
+            agenda:
+              type: string
+              description: agenda field name.
+            questions:
+              type: string
+              description: questions field name.
+            results:
+              type: string
+              description: results field name.
     Error:
       type: object
+      required:
+        - code
+        - type
+        - message
       properties:
         code:
           type: integer
@@ -143,5 +149,5 @@ components:
         message:
           type: string
 externalDocs:
-  description: Find out more about Swagger
+  description: Find out more about Swagger.
   url: http://swagger.io
