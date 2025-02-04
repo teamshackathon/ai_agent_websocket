@@ -26,5 +26,5 @@ def cmd_test_zip():
     return test_zip(request)
 
 if __name__ == '__main__':
-    app.debug = True
+    app.debug = False
     app.run(host='0.0.0.0', port=3001)
