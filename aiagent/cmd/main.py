@@ -9,6 +9,14 @@ app = Flask(__name__)
 def cmd_hello_ai():
     return hello_ai(request)
 
+@app.route('/chats_as_student', methods=['POST'])
+def cmd_chats_as_student():
+    return chat_ai_as_student(request)
+
+@app.route('/chats_as_teacher', methods=['POST'])
+def cmd_chats_as_teacher():
+    return chat_ai_as_teacher(request)
+
 @app.route('/create_agenda', methods=['POST'])
 def cmd_create_agenda():
     return create_agenda(request)
