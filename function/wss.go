@@ -4,7 +4,6 @@ import (
 	"cloud.google.com/go/speech/apiv1"
 	"cloud.google.com/go/vertexai/genai"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -78,6 +77,7 @@ func setResponseHeaders(w http.ResponseWriter, r *http.Request) {
 }
 
 var upgrader = websocket.Upgrader{
+	/** デバックの為コメントアウト
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		coses := strings.Split(os.Getenv("COSE_ORIGIN"), ",")
@@ -88,7 +88,7 @@ var upgrader = websocket.Upgrader{
 			}
 		}
 		return false
-	},
+	},*/
 }
 
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -108,13 +108,7 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		decodedAudioData, err := base64.StdEncoding.DecodeString(string(audioData))
-		if err != nil {
-			log.Println("Error decoding base64 audio data:", err)
-			break
-		}
-
-		transcribedText, err := processAudioWithAI(decodedAudioData)
+		transcribedText, err := processAudioWithAI(audioData)
 		if err != nil {
 			log.Println("Error processing audio:", err)
 			break
@@ -143,7 +137,7 @@ func processAudioWithAI(audioData []byte) (string, error) {
 	}
 
 	config := &speechpb.RecognitionConfig{
-		Encoding:        speechpb.RecognitionConfig_WEBM_OPUS,
+		Encoding:        speechpb.RecognitionConfig_LINEAR16,
 		SampleRateHertz: 48000,
 		LanguageCode:    "ja-JP",
 	}
