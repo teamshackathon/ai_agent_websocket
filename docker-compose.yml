@@ -8,12 +8,36 @@ services:
       - ./function/.env.develop
     ports:
       - "3002:3002"
-
+    volumes:
+      - ./function:/app
   webui:
     build: ./webui
     container_name: webui
     depends_on:
       - function
     ports:
-      - "3000:3000"  
+      - "3000:3000"
+    volumes:
+      - ./webui:/app
+  aiagent:
+    build: ./aiagent
+    container_name: aiagent
+    ports:
+      - "3001:3001"  
+    volumes:
+      - ./aiagent:/app
+  swagger-editor:
+    image: swaggerapi/swagger-editor
+    container_name: "swagger-editor"
+    ports:
+      - "8001:8080"
 
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    container_name: "swagger-ui"
+    ports:
+      - "8002:8080"
+    volumes:
+      - ./swagger/openapi.yaml:/openapi.yaml
+    environment:
+      SWAGGER_JSON: /openapi.yaml

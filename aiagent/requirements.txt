@@ -1,0 +1,16 @@
+# An example requirements file. If your function has other dependencies,
+# add them below
+functions-framework==3.*
+google-generativeai<=0.8.0
+langchain-core>=0.2.38
+langchain-google-genai
+langchain-community==0.2.*
+langchain-text-splitters==0.2.4
+langchain-chroma==0.2.1
+chromadb==0.6.3
+flask==2.0.1
+werkzeug==2.0.1
+flasgger==0.9.7.1
+firebase-admin==6.0.1
+urllib3<2.0
+grpcio==1.67.1

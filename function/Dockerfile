@@ -10,9 +10,6 @@ COPY go.mod go.sum ./
 # 依存関係をインストール
 RUN go mod tidy
 
-# ソースコードをコピー
-COPY . .
-
 # HTTPポートを公開
 EXPOSE 3002
 

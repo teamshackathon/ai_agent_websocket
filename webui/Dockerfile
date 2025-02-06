@@ -10,9 +10,6 @@ COPY package.json package-lock.json ./
 # 必要なパッケージをインストール
 RUN npm install
 
-# ソースコードをコンテナにコピー
-COPY . .
-
 # ポート3000を公開
 EXPOSE 3000
 
