@@ -14,7 +14,7 @@
 ### Debug 時コマンド
 ```bash
 export $(cat .env.develop | xargs) && \
-go run cmd/main.go
+go run wss.go
 ```
 
 ## Product

@@ -1,4 +1,4 @@
-package function
+package main
 
 import (
 	"cloud.google.com/go/speech/apiv1"
@@ -6,8 +6,11 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/gorilla/websocket"
+	socketio "github.com/googollee/go-socket.io"
+	"github.com/googollee/go-socket.io/engineio"
+	"github.com/googollee/go-socket.io/engineio/transport"
+	"github.com/googollee/go-socket.io/engineio/transport/polling"
+	"github.com/googollee/go-socket.io/engineio/transport/websocket"
 	speechpb "google.golang.org/genproto/googleapis/cloud/speech/v1"
 	"log"
 	"net/http"
@@ -44,22 +47,81 @@ func getGeminiClient() (*genai.Client, error) {
 	return genaiClient, err
 }
 
-func Main(w http.ResponseWriter, r *http.Request) {
+// Easier to get running with CORS. Thanks for help @Vindexus and @erkie
+var allowOriginFunc = func(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	coses := strings.Split(os.Getenv("COSE_ORIGIN"), ",")
+	for _, v := range coses {
+		// 特定のオリジンのみ許可
+		if origin == v {
+			return true
+		}
+	}
+	return false
+}
+
+func main() {
 	log.SetFlags(0)
 
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
+	// Socket.IOサーバーの作成
+	server := socketio.NewServer(&engineio.Options{
+		Transports: []transport.Transport{
+			&polling.Transport{
+				CheckOrigin: allowOriginFunc,
+			},
+			&websocket.Transport{
+				CheckOrigin: allowOriginFunc,
+			},
+		},
+	})
+
+	// イベントハンドラの設定
+	server.OnConnect("/", func(s socketio.Conn) error {
+		s.SetContext("")
+		log.Println("Client connected:", s.ID())
+		return nil
+	})
+
+	// メッセージを受け取るイベント
+	server.OnEvent("/", "message", func(s socketio.Conn, msg string) {
+		log.Println("Received message:", msg)
+	})
+
+	// メッセージを受け取るイベント
+	server.OnEvent("/", "audio_data", func(s socketio.Conn, audioData []byte) {
+		log.Println("Received audio data.")
+		decodedAudioData, err := base64.StdEncoding.DecodeString(string(audioData))
+		if err != nil {
+			log.Println("Error decoding base64 audio data:", err)
+			return
+		}
+
+		transcribedText, err := processAudioWithAI(decodedAudioData)
+		if err != nil {
+			log.Println("Error processing audio:", err)
+			return
+		}
+		log.Println("Transcribed text:", transcribedText)
+	})
+
+	// クライアントが切断したときの処理
+	server.OnDisconnect("/", func(s socketio.Conn, reason string) {
+		log.Println("Client disconnected:", s.ID(), reason)
+	})
+
+	// HTTPサーバーの作成とSocket.IOサーバーのハンドリング
+	http.Handle("/socket.io/", server)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// デフォルトのHTMLファイルを返す
+		http.ServeFile(w, r, "index.html")
+	})
+
+	// サーバーの起動（Cloud Runの場合はポート3002を利用）
+	port := os.Getenv("SERVICE_PORT")
+	log.Println("Starting WebSocket server on :" + port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Fatal(err)
 	}
-
-	routes := mux.NewRouter()
-
-	// パスごとにハンドラーを登録
-	routes.HandleFunc("/", HandleWebSocket).Methods("GET")
-	routes.HandleFunc("/query", QueryGeminiAPI).Methods("POST")
-
-	// ハンドラーを実行
-	routes.ServeHTTP(w, r)
 }
 
 func setResponseHeaders(w http.ResponseWriter, r *http.Request) {
@@ -75,58 +137,6 @@ func setResponseHeaders(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-}
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		coses := strings.Split(os.Getenv("COSE_ORIGIN"), ",")
-		for _, v := range coses {
-			// 特定のオリジンのみ許可
-			if origin == v {
-				return true
-			}
-		}
-		return false
-	},
-}
-
-func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println("Upgrade error:", err)
-		return
-	}
-	defer conn.Close()
-
-	log.Println("Connected")
-
-	for {
-		_, audioData, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("Error reading message:", err)
-			break
-		}
-
-		decodedAudioData, err := base64.StdEncoding.DecodeString(string(audioData))
-		if err != nil {
-			log.Println("Error decoding base64 audio data:", err)
-			break
-		}
-
-		transcribedText, err := processAudioWithAI(decodedAudioData)
-		if err != nil {
-			log.Println("Error processing audio:", err)
-			break
-		}
-		log.Println("Transcribed text:", transcribedText)
-
-		err = conn.WriteMessage(websocket.TextMessage, []byte(transcribedText))
-		if err != nil {
-			log.Println("Error sending message:", err)
-			break
-		}
-	}
 }
 
 func processAudioWithAI(audioData []byte) (string, error) {

@@ -7,8 +7,7 @@ toolchain go1.22.11
 require (
 	cloud.google.com/go/speech v1.26.0
 	cloud.google.com/go/vertexai v0.13.3
-	github.com/gorilla/mux v1.8.0
-	github.com/gorilla/websocket v1.5.3
+	github.com/googollee/go-socket.io v1.7.0
 	google.golang.org/genproto v0.0.0-20250115164207-1a7da9e5054f
 )
 
@@ -23,9 +22,12 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/gofrs/uuid v4.0.0+incompatible // indirect
+	github.com/gomodule/redigo v1.8.4 // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.0 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.54.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.54.0 // indirect
 	go.opentelemetry.io/otel v1.31.0 // indirect
