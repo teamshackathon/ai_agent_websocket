@@ -19,9 +19,7 @@ SCHEMA_AGENDA = '''{
             "maxLength": 100
           },
           "time": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 20
+            "type": "number"
           },
           "description": {
             "type": "string",
@@ -148,6 +146,46 @@ SCHEMA_QUESTION = '''{
             "type": "number"
         }
     }
+}'''
+
+
+QUESTION_SAMPLE = '''{
+		"questions": [
+				{
+				    "title": "動詞の使い方",
+				    "format": "Anaume",
+				    "score": 25,
+				    "question": "英語の文で「I _ a book.」と書く場合、空欄にはどの動詞を入れますか？",
+				    "correct_answer": "read"
+				},
+				{
+				    "title": "疑問文の作り方",
+				    "format": "Sentaku",
+				    "score": 25,
+				    "question": "次の文を疑問文にするにはどの語順を使いますか？「He is a teacher.」",
+				    "options": [
+				        {"item_num": 1, "item_word": "Is he a teacher?"},
+				        {"item_num": 2, "item_word": "He is a teacher?"},
+				        {"item_num": 3, "item_word": "A teacher is he?"}
+				    ],
+				    "correct_answer": "Is he a teacher?",
+				    "correct_num": 1
+				},
+				{
+				    "title": "名詞の複数形",
+				    "format": "Kijutsu",
+				    "score": 25,
+				    "question": "「cat」の複数形は何ですか？",
+				    "correct_answer": "cats"
+				},
+				{
+				    "title": "時間の表現",
+				    "format": "Anaume",
+				    "score": 25,
+				    "question": "英語で「今は3時です」と言いたい場合、空欄には何が入りますか？「It is _ o'clock.」",
+				    "correct_answer": "three"
+				}
+    ]
 }'''
 
 SCHEMA_ANSWER = '''{

@@ -2,6 +2,7 @@ import base64
 import zipfile
 import shutil
 import os
+import json
 
 import functions_framework
 import google.generativeai as genai
@@ -14,8 +15,11 @@ from langchain_text_splitters import CharacterTextSplitter
 
 from pydantic import BaseModel, Field
 from chromadb import PersistentClient
-from jschema import *
+import jschema
+import jprompt
 from firebase import Firestore, Firestorage
+
+
 
 class Recipe(BaseModel):
     ingredients: list[str] = Field(description="ingredients of the dish")
@@ -66,7 +70,7 @@ def chat_ai_as_student(request):
         doc_dict = Firestore.to_dict(doc_path)
         print(doc_dict, flush=True)
         if doc_dict is not None:
-            context.append(f"{doc_dict["senderId"]}:"+doc_dict['text'] + f"{doc_dict['messageId']}に送信")
+            context.append(f"{doc_dict['senderId']}:"+doc_dict['text'] + f"{doc_dict['messageId']}に送信")
 
     context = '\n'.join(context)
 
@@ -125,7 +129,7 @@ def chat_ai_as_teacher(request):
         doc_dict = Firestore.to_dict(doc_path)
         print(doc_dict, flush=True)
         if doc_dict is not None:
-            context.append(f"{doc_dict["senderId"]}:"+doc_dict['text'] + f"{doc_dict['messageId']}に送信")
+            context.append(f"{doc_dict['senderId']}:"+doc_dict['text'] + f"{doc_dict['messageId']}に送信")
 
     context = '\n'.join(context)
 
@@ -204,49 +208,72 @@ def create_agenda(request):
         # ChromaDBを作成
         db = create_chroma(chroma_path)
 
-    # リトライ回数の設定
-    max_retries = 5
-    retry_count = 0
+    # アジェンダ作成
+    agenda_data = create_agenda_from_vector(db, start_page, finish_page)
 
-    while retry_count < max_retries:
-        try:
-            # アジェンダを作成
-            json_agenda = create_agenda_from_vector(db, start_page, finish_page)
-            # アジェンダ格納フィールド名
-            field_name = "agenda_draft"
-            # アジェンダをFirestoreに格納
-            import json
-            json_data = json.loads(json_agenda)
+    # アジェンダ格納フィールド名
+    field_name = "agenda_draft"
+    json_agenda = json.loads(agenda_data)
+    Firestore.set_field(reference, field_name, json_agenda)
 
-            # 全てのagenda配下のフィールドのうちtimeを文字列をintに変換（文字が入っていても強制的に）
-            for agenda in json_data['agenda']:
-                # 数値部分を抽出して整数に変換
-                agenda['time'] = int(''.join(filter(str.isdigit, agenda['time'])))
-
-            Firestore.set_field(reference, field_name, json_data)
-
-            Firestore.set_field(reference, 'start_page', int(start_page))
-            Firestore.set_field(reference, 'finish_page', int(finish_page))
-
-            break
-        except json.JSONDecodeError as e:
-            print(f"JSONDecodeError: {e}. Retrying... ({retry_count + 1}/{max_retries})", flush=True)
-            retry_count += 1
-            if retry_count == max_retries:
-                return error_response(500, 'JSON_ERROR', "Failed to decode JSON after multiple attempts.")
+    Firestore.set_field(reference, 'start_page', int(start_page))
+    Firestore.set_field(reference, 'finish_page', int(finish_page))
 
     # TODO Notice実装予定
 
     return created_response(reference, agenda=field_name)
+
 
 @functions_framework.http
 def create_questions(request):
     # JSONデータを取得
     data = request.get_json()
 
-    # TODO テスト作成実装予定
+    reference = data.get('reference')
+    if reference is None:
+        return error_response(400, 'INPUT_ERROR', "reference is required.")
 
-    return "OK", 200
+    # TODO Noticeパラメータ取得の実装予定
+
+    dict_ref = parse_path(str(reference))
+    dict_ref_field = Firestore.to_dict(reference)
+
+    start_page = dict_ref_field.get('start_page')
+    finish_page = dict_ref_field.get('finish_page')
+
+    if start_page is None or finish_page is None:
+        return error_response(400, 'SETTING_ERROR', "Failed cant find start_page/finish_page.")
+
+    subject_path = dict_ref['year'] + '/' + dict_ref['class'] + '/common/' + dict_ref['subject']
+    # ドキュメントを取得
+    dict_field = Firestore.to_dict(subject_path)
+
+    if dict_field is None or dict_field == {}:
+        return error_response(400, 'SETTING_ERROR', "Failed find text path.")
+
+    # ChromaDBをfirestoreから取得
+    text_chroma_path = dict_field.get('text_chroma')
+    if text_chroma_path is None:
+        return error_response(400, 'SETTING_ERROR', "Failed make agenda before making question.")
+
+    # Chroma DB path
+    chroma_path = "/tmp/chroma"
+    # ChromaDBをfirestorageから取得
+    restore_chroma(text_chroma_path, chroma_path)
+    # ChromaDBを作成
+    db = create_chroma(chroma_path)
+
+    question_data = create_questions_from_vector(db, start_page, finish_page)
+
+    # 小テスト格納フィールド名
+    field_name = "questions_draft"
+    json_questions = json.loads(question_data)
+    Firestore.set_field(reference, field_name, json_questions)
+
+    # TODO Notice実装予定
+
+    return created_response(reference, questions=field_name)
+
 
 ### langchain functions ###
 
@@ -263,7 +290,7 @@ def create_chroma(chroma_path, docs=None):
         client=client
     )
 
-    if docs is not None:
+    if docs:
         # ドキュメントをドキュメント化し、保存
         db.add_documents(documents=docs, embedding=embeddings)
     return db
@@ -272,7 +299,7 @@ def create_agenda_from_vector(db, start_page, finish_page):
     # テキストに関連するドキュメントを得るインターフェースを「Retriever」と言います。
     retriever = db.as_retriever()
 
-    schema_agenda_runnable = RunnableLambda(lambda x: SCHEMA_AGENDA)
+    schema_agenda_runnable = RunnableLambda(lambda x: jschema.SCHEMA_AGENDA)
 
     prompt = ChatPromptTemplate.from_template('''\
     以下の文脈だけを踏まえて質問に回答してください。
@@ -308,6 +335,55 @@ def create_agenda_from_vector(db, start_page, finish_page):
     return json_agenda
 
 
+def create_questions_from_vector(db, start_page, finish_page):
+    # テキストに関連するドキュメントを得るインターフェースを「Retriever」と言います。
+    retriever = db.as_retriever()
+
+    rule_test_runnable = RunnableLambda(lambda x: jprompt.RULE_TEST)
+    schema_question_runnable = RunnableLambda(lambda x: jschema.SCHEMA_QUESTION)
+    question_sample_runnable = RunnableLambda(lambda x: jschema.QUESTION_SAMPLE)
+
+    # TODO 授業音声を取り込んで問題に反映させる
+
+    prompt = ChatPromptTemplate.from_template('''\
+    以下の文脈だけを踏まえて質問に回答してください。
+
+    文脈:"""
+    {context}
+    """
+
+    質問:{question}
+
+    問題のルール:"""
+    {rule}
+    """
+
+    問題定義の出力形式:"""
+    {schema}
+    """
+
+    問題定義の出力形式の例:"""
+    {schema_sample}
+    """
+    ''')
+
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
+
+    chain = (
+            {"context": retriever, "question": RunnablePassthrough(), "rule": rule_test_runnable, "schema": schema_question_runnable, "schema_sample": question_sample_runnable}
+            | prompt
+            | llm
+            | StrOutputParser()
+            | replaced2json
+    )
+
+    query = f"授業の小テストを作成します。{start_page}ページから{finish_page}ページの内容を元に問題を4題作成してください。問題の重要度を鑑みて`score`の点数設定をしてください。"
+    # Json形式の小テスト作成
+    questions_data = chain.invoke(query)
+
+    return questions_data
+
+
 @chain
 def replaced2json(output: str) -> str:
   replaced_output = output.replace('```json', '').replace('```', '')
@@ -322,17 +398,7 @@ def convert_pdf_to_docs(file_path):
         raise ValueError(f"Failed to retrieve bytes from file: {file_path}")
     doc_data = base64.standard_b64encode(blob_bytes).decode("utf-8")
 
-    prompt = '''添付した資料を以下のルールを踏まえて文字列として抽出してください。
-    - １文中の改行は削除する
-    - 文先頭の空白の前で改行する
-    - 意味の通らない文章や誤字脱字は修正して文章を再構成する
-    - 各章ごとに'---'で区切る
-    - PDFページ番号を<ページ番号>の形式で出力する
-    - 
-    '''
-    response = model.generate_content([{'mime_type': 'application/pdf', 'data': doc_data}, prompt]).text
-
-    print(response, flush=True)
+    response = model.generate_content([{'mime_type': 'application/pdf', 'data': doc_data}, jprompt.RULE_TEXT]).text
 
     # text_splitter = CharacterTextSplitter(chunk_size=1500, chunk_overlap=100, separator='\n---\n')
     text_splitter = CharacterTextSplitter(chunk_size=1500, chunk_overlap=500)
