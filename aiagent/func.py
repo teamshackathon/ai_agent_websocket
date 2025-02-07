@@ -32,6 +32,125 @@ def hello_ai(request):
     return (f"Hello AI. \n <pre>{output}</pre>"), 200
 
 @functions_framework.http
+def chat_ai_as_student(request):
+
+    # JSONデータを取得
+    data = request.get_json()
+
+    reference = data.get('reference')
+    if reference is None:
+        return error_response(400, 'INPUT_ERROR', "reference is required.")
+    
+    dict_ref = parse_chat_path(str(reference))
+
+    chats_path = dict_ref['chats'] + '/' + dict_ref['chatId'] + '/messages'
+    print(chats_path, flush=True)
+    # ドキュメントを取得
+    list_doc = Firestore.to_list(chats_path)
+    
+    if list_doc is None or len(list_doc) == 0:
+        return error_response(400, '_ERROR', "Nothing found in the path.")
+
+    print(list_doc, flush=True)
+
+    # 配列の中身をintに変換
+    list_doc = [int(i) for i in list_doc]
+    # 大きい順にソート
+    list_doc.sort(reverse=True)
+    # 大きいものから10個取得
+    list_doc = list_doc[:10]
+
+    context = []
+    for doc_id in list_doc:
+        doc_path = chats_path + '/' + str(doc_id)
+        doc_dict = Firestore.to_dict(doc_path)
+        print(doc_dict, flush=True)
+        if doc_dict is not None:
+            context.append(f"{doc_dict["senderId"]}:"+doc_dict['text'] + f"{doc_dict['messageId']}に送信")
+
+    context = '\n'.join(context)
+
+    prompt = """
+    あなたは教師です。そしてこれは生徒とのチャットです。生徒が質問をしてきました。その質問に対して回答してください。
+    今までの会話は以下の通りです。
+    """ + context
+
+
+    model = GoogleGenerativeAI(model="gemini-2.0-flash-exp")
+    output = model.invoke(prompt)
+    from datetime import datetime
+    # 新規メッセージの作成
+    doc_id = str(int(datetime.now().timestamp() * 1000))
+
+    Firestore.set_field(chats_path + "/" + doc_id, "messageId", doc_id)
+    Firestore.set_field(chats_path + "/" + doc_id, "senderId", "ManabiyaAI")
+    Firestore.set_field(chats_path + "/" + doc_id, "text", output)
+    Firestore.set_field(chats_path + "/" + doc_id, "createdAt", datetime.now())
+    Firestore.set_field(chats_path + "/" + doc_id, "read", False)
+
+    return output, 200
+
+@functions_framework.http
+def chat_ai_as_teacher(request):
+
+    # JSONデータを取得
+    data = request.get_json()
+
+    reference = data.get('reference')
+    if reference is None:
+        return error_response(400, 'INPUT_ERROR', "reference is required.")
+    
+    dict_ref = parse_chat_path(str(reference))
+
+    chats_path = dict_ref['chats'] + '/' + dict_ref['chatId'] + '/messages'
+    print(chats_path, flush=True)
+    # ドキュメントを取得
+    list_doc = Firestore.to_list(chats_path)
+    
+    if list_doc is None or len(list_doc) == 0:
+        return error_response(400, '_ERROR', "Nothing found in the path.")
+
+    print(list_doc, flush=True)
+
+    # 配列の中身をintに変換
+    list_doc = [int(i) for i in list_doc]
+    # 大きい順にソート
+    list_doc.sort(reverse=True)
+    # 大きいものから10個取得
+    list_doc = list_doc[:10]
+
+    context = []
+    for doc_id in list_doc:
+        doc_path = chats_path + '/' + str(doc_id)
+        doc_dict = Firestore.to_dict(doc_path)
+        print(doc_dict, flush=True)
+        if doc_dict is not None:
+            context.append(f"{doc_dict["senderId"]}:"+doc_dict['text'] + f"{doc_dict['messageId']}に送信")
+
+    context = '\n'.join(context)
+
+    prompt = """
+    あなたはベテラン教師です。そしてこれは教師とのチャットです。教師が質問をしてきました。その質問に対して回答してください。
+    今までの会話は以下の通りです。
+    """ + context
+
+
+    model = GoogleGenerativeAI(model="gemini-2.0-flash-exp")
+    output = model.invoke(prompt)
+    from datetime import datetime
+    # 新規メッセージの作成
+    doc_id = str(int(datetime.now().timestamp() * 1000))
+
+    Firestore.set_field(chats_path + "/" + doc_id, "messageId", doc_id)
+    Firestore.set_field(chats_path + "/" + doc_id, "senderId", "ManabiyaAI")
+    Firestore.set_field(chats_path + "/" + doc_id, "text", output)
+    Firestore.set_field(chats_path + "/" + doc_id, "createdAt", datetime.now())
+    Firestore.set_field(chats_path + "/" + doc_id, "read", False)
+
+    return output, 200
+    
+
+@functions_framework.http
 def create_agenda(request):
     # JSONデータを取得
     data = request.get_json()
@@ -85,15 +204,36 @@ def create_agenda(request):
         # ChromaDBを作成
         db = create_chroma(chroma_path)
 
-    # アジェンダを作成
-    json_agenda = create_agenda_from_vector(db, start_page, finish_page)
-    # アジェンダ格納フィールド名
-    field_name = "agenda_draft"
-    # アジェンダをFirestoreに格納
-    Firestore.set_field(reference, field_name, json_agenda)
+    # リトライ回数の設定
+    max_retries = 5
+    retry_count = 0
 
-    Firestore.set_field(reference, 'start_page', start_page)
-    Firestore.set_field(reference, 'finish_page', finish_page)
+    while retry_count < max_retries:
+        try:
+            # アジェンダを作成
+            json_agenda = create_agenda_from_vector(db, start_page, finish_page)
+            # アジェンダ格納フィールド名
+            field_name = "agenda_draft"
+            # アジェンダをFirestoreに格納
+            import json
+            json_data = json.loads(json_agenda)
+
+            # 全てのagenda配下のフィールドのうちtimeを文字列をintに変換（文字が入っていても強制的に）
+            for agenda in json_data['agenda']:
+                # 数値部分を抽出して整数に変換
+                agenda['time'] = int(''.join(filter(str.isdigit, agenda['time'])))
+
+            Firestore.set_field(reference, field_name, json_data)
+
+            Firestore.set_field(reference, 'start_page', int(start_page))
+            Firestore.set_field(reference, 'finish_page', int(finish_page))
+
+            break
+        except json.JSONDecodeError as e:
+            print(f"JSONDecodeError: {e}. Retrying... ({retry_count + 1}/{max_retries})", flush=True)
+            retry_count += 1
+            if retry_count == max_retries:
+                return error_response(500, 'JSON_ERROR', "Failed to decode JSON after multiple attempts.")
 
     # TODO Notice実装予定
 
@@ -254,6 +394,22 @@ def parse_path(path):
     keys = ['year', 'class', 'student', 'subject', 'lessons', 'lesson_id']
     path_parts = path.split('/')
 
+    dict_path = {}
+    for i in range(len(path_parts)):
+        if len(keys) <= i: break
+        dict_path[keys[i]] = path_parts[i]
+
+    return dict_path
+
+def parse_chat_path(path):
+    '''
+    Chatsパスの各要素を解析する
+    :param path: reference path
+    :return: object[chats, chatId, messages]
+    '''
+
+    keys = ['chats', 'chatId', 'messages']
+    path_parts = path.split('/')
     dict_path = {}
     for i in range(len(path_parts)):
         if len(keys) <= i: break
