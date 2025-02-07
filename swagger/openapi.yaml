@@ -17,11 +17,68 @@ paths:
           content:
             plain/text:
               example: Hello AI.
+  /chat_ai_as_student:
+    post:
+      description: |
+        Let AI answer questions from students.
+      operationId: cmd_chat_ai_as_student
+      parameters: []
+      requestBody:
+        description: chat messages reference.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefrenceRequest'
+            example:
+              reference: "chats/2024-1-1-daisuke.suzuki"
+      responses:
+        '200':
+          description: response chat message from AI.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example:
+                I answer your question.
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /chat_ai_as_teacher:
+    post:
+      description: |
+        Let AI answer questions from teature.
+      operationId: cmd_chat_ai_as_teacher
+      parameters: []
+      requestBody:
+        description: chat messages reference.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefrenceRequest'
+            example:
+              reference: "chats/2024-1-1-daisuke.suzuki-english-teacher"
+      responses:
+        '200':
+          description: response chat message from AI.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example:
+                I answer your question.
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /create_agenda:
     post:
       description: |
-        Create class resume data from textbook data.
-        Specify the target lesson.
+        Create lesson agenda data from textbook.
       operationId: cmd_create_agenda
       parameters: []
       requestBody:
@@ -57,7 +114,7 @@ paths:
   /create_questions:
     post:
       description: |
-        Create quizzes from textbook data and class audio data.
+        Create questions from textbook data and class audio data.
       operationId: cmd_create_questions
       parameters: []
       requestBody:
@@ -87,14 +144,80 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /answered_questions:
+    post:
+      description: |
+        Answered questions from student.
+        Grade the answers and executes up to homework creation.
+      operationId: cmd_answered_questions
+      parameters: []
+      requestBody:
+        description: You will be notified that you have answered and submitted the questions.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefrenceRequest'
+            example:
+              reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/student/souta.hasegawa/souta.hasegawa"
+              notice: ["nama.nama", "souta.hasegawa"]
+      responses:
+        '200':
+          description: Return test data path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateResult'
+              example:
+                reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/student/souta.hasegawa/souta.hasegawa"
+                feilds: {
+                  questions_result: "questions_result",
+                  homework: "homework"
+                }
+        default:
+          description: unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /submit_homework:
+    post:
+      description: |
+        Submit your homework. Perform homework grading and store results.
+      operationId: cmd_answered_homework
+      parameters: []
+      requestBody:
+        description: You will be notified that you have answered and submitted the questions.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefrenceRequest'
+            example:
+              reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/student/souta.hasegawa/souta.hasegawa"
+              notice: ["nama.nama", "souta.hasegawa"]
+      responses:
+        '200':
+          description: Return test data path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateResult'
+              example:
+                reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/student/souta.hasegawa/souta.hasegawa"
+                feilds: {
+                  homework_result: "homework_result"
+                }
+        default:
+          description: unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
     RefrenceRequest:
       type: object
       required:
         - reference
-        - start_page
-        - finish_page
       properties:
         reference:
           type: string
@@ -131,9 +254,15 @@ components:
             questions:
               type: string
               description: questions field name.
-            results:
+            questions_result:
               type: string
-              description: results field name.
+              description: questions_result field name.
+            homework:
+              type: string
+              description: homework field name.
+            homework_result:
+              type: string
+              description: homework_result field name.
     Error:
       type: object
       required:
