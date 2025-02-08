@@ -1,6 +1,5 @@
 from flask import Flask, request
-
-import os
+import werkzeug.datastructures
 from func import *
 
 app = Flask(__name__)
@@ -53,6 +52,19 @@ def cmd_test_copy_field():
 def cmd_test_show_field():
     return test_show_field(request)
 
-if __name__ == '__main__':
-    app.debug = True
-    app.run(host='0.0.0.0', port=3001)
+# Cloud Functionsのエントリーポイント
+def cloud_function(request):
+    with app.app_context():
+        headers = werkzeug.datastructures.Headers()
+        for key, value in request.headers.items():
+            headers.add(key, value)
+        with app.test_request_context(method=request.method, base_url=request.base_url, path=request.path,
+                                      query_string=request.query_string, headers=headers, data=request.form):
+            try:
+                rv = app.preprocess_request()
+                if rv is None:
+                    rv = app.dispatch_request()
+            except Exception as e:
+                rv = app.handle_user_exception(e)
+            response = app.make_response(rv)
+            return app.process_response(response)
