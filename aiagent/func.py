@@ -3,6 +3,7 @@ import zipfile
 import shutil
 import os
 import json
+from typing import Dict, Tuple, Union
 
 import functions_framework
 import google.generativeai as genai
@@ -15,10 +16,10 @@ from langchain_text_splitters import CharacterTextSplitter
 
 from pydantic import BaseModel, Field
 from chromadb import PersistentClient
+
 import jschema
 import jprompt
 from firebase import Firestore, Firestorage
-
 
 
 class Recipe(BaseModel):
@@ -236,43 +237,77 @@ def create_questions(request):
     # TODO Noticeパラメータ取得の実装予定
 
     dict_ref = parse_path(str(reference))
-    dict_ref_field = Firestore.to_dict(reference)
 
-    start_page = dict_ref_field.get('start_page')
-    finish_page = dict_ref_field.get('finish_page')
+    start_page, finish_page, err = prepare_page(dict_ref)
+    if err:
+        return error_response(400, 'SETTING_ERROR', err)
 
-    if start_page is None or finish_page is None:
-        return error_response(400, 'SETTING_ERROR', "Failed cant find start_page/finish_page.")
+    db, err = prepare_chroma(dict_ref)
+    if err:
+        return error_response(400, 'SETTING_ERROR', err)
 
-    subject_path = dict_ref['year'] + '/' + dict_ref['class'] + '/common/' + dict_ref['subject']
-    # ドキュメントを取得
-    dict_field = Firestore.to_dict(subject_path)
-
-    if dict_field is None or dict_field == {}:
-        return error_response(400, 'SETTING_ERROR', "Failed find text path.")
-
-    # ChromaDBをfirestoreから取得
-    text_chroma_path = dict_field.get('text_chroma')
-    if text_chroma_path is None:
-        return error_response(400, 'SETTING_ERROR', "Failed make agenda before making question.")
-
-    # Chroma DB path
-    chroma_path = "/tmp/chroma"
-    # ChromaDBをfirestorageから取得
-    restore_chroma(text_chroma_path, chroma_path)
-    # ChromaDBを作成
-    db = create_chroma(chroma_path)
-
-    question_data = create_questions_from_vector(db, start_page, finish_page)
+    questions_data = create_questions_from_vector(db, start_page, finish_page)
 
     # 小テスト格納フィールド名
     field_name = "questions_draft"
-    json_questions = json.loads(question_data)
+    json_questions = json.loads(questions_data)
     Firestore.set_field(reference, field_name, json_questions)
 
     # TODO Notice実装予定
 
     return created_response(reference, questions=field_name)
+
+
+@functions_framework.http
+def answered_questions(request):
+    # JSONデータを取得
+    data = request.get_json()
+
+    reference = data.get('reference')
+    if reference is None:
+        return error_response(400, 'INPUT_ERROR', "reference is required.")
+
+    dict_ref = parse_path(str(reference))
+    dict_ref_field = Firestore.to_dict(reference)
+
+    dict_answers = dict_ref_field.get('answers')
+    if dict_answers is None:
+        return error_response(400, 'INPUT_ERROR', "cant find answers field.")
+
+    dict_questions, err = prepare_questions(dict_ref)
+    if dict_questions is None:
+        return error_response(400, 'SETTING_ERROR', err)
+
+    start_page, finish_page, err = prepare_page(dict_ref)
+    if err:
+        return error_response(400, 'SETTING_ERROR', err)
+
+    db, err = prepare_chroma(dict_ref)
+    if err:
+        return error_response(400, 'SETTING_ERROR', err)
+
+    results_data = create_results_from_vector(db, start_page, finish_page, dict_questions, dict_answers)
+
+    # 小テスト採点結果格納フィールド名
+    result_field_name = "questions_result"
+    json_results = json.loads(results_data)
+    Firestore.set_field(reference, result_field_name, json_results)
+
+    # TODO 宿題を作成
+
+    return created_response(reference, questions_result=result_field_name, homework='homework')
+
+
+@functions_framework.http
+def submit_homework(request):
+    # JSONデータを取得
+    data = request.get_json()
+
+    reference = data.get('reference')
+
+    # TODO 宿題採点
+
+    return created_response(reference, homework_result='homework_result')
 
 
 ### langchain functions ###
@@ -296,7 +331,6 @@ def create_chroma(chroma_path, docs=None):
     return db
 
 def create_agenda_from_vector(db, start_page, finish_page):
-    # テキストに関連するドキュメントを得るインターフェースを「Retriever」と言います。
     retriever = db.as_retriever()
 
     schema_agenda_runnable = RunnableLambda(lambda x: jschema.SCHEMA_AGENDA)
@@ -336,12 +370,11 @@ def create_agenda_from_vector(db, start_page, finish_page):
 
 
 def create_questions_from_vector(db, start_page, finish_page):
-    # テキストに関連するドキュメントを得るインターフェースを「Retriever」と言います。
     retriever = db.as_retriever()
 
-    rule_test_runnable = RunnableLambda(lambda x: jprompt.RULE_TEST)
-    schema_question_runnable = RunnableLambda(lambda x: jschema.SCHEMA_QUESTION)
-    question_sample_runnable = RunnableLambda(lambda x: jschema.QUESTION_SAMPLE)
+    rule_test_runnable = RunnableLambda(lambda x: jprompt.RULE_QUESTIONS)
+    schema_questions_runnable = RunnableLambda(lambda x: jschema.SCHEMA_QUESTIONS)
+    questions_sample_runnable = RunnableLambda(lambda x: jschema.QUESTIONS_SAMPLE)
 
     # TODO 授業音声を取り込んで問題に反映させる
 
@@ -358,11 +391,11 @@ def create_questions_from_vector(db, start_page, finish_page):
     {rule}
     """
 
-    問題定義の出力形式:"""
+    問題定義:"""
     {schema}
     """
 
-    問題定義の出力形式の例:"""
+    問題定義の出力例:"""
     {schema_sample}
     """
     ''')
@@ -370,18 +403,81 @@ def create_questions_from_vector(db, start_page, finish_page):
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
 
     chain = (
-            {"context": retriever, "question": RunnablePassthrough(), "rule": rule_test_runnable, "schema": schema_question_runnable, "schema_sample": question_sample_runnable}
+            {"context": retriever, "question": RunnablePassthrough(), "rule": rule_test_runnable, "schema": schema_questions_runnable, "schema_sample": questions_sample_runnable}
             | prompt
             | llm
             | StrOutputParser()
             | replaced2json
     )
 
-    query = f"授業の小テストを作成します。{start_page}ページから{finish_page}ページの内容を元に問題を4題作成してください。問題の重要度を鑑みて`score`の点数設定をしてください。"
+    query = f"授業の小テストを作成します。`文脈`の**page {start_page}**から**page {finish_page}**の内容を元に問題を**4題**作成してください。問題の重要度を鑑みて`問題定義`の`score`の点数設定をしてください。"
     # Json形式の小テスト作成
     questions_data = chain.invoke(query)
 
     return questions_data
+
+def create_results_from_vector(db, start_page, finish_page, dict_questions, dict_answers):
+    retriever = db.as_retriever()
+
+    questions_runnable = RunnableLambda(lambda x: dict_questions)  # 小テスト問題内容（小テストの正解・得点を使用する）
+    answers_runnable = RunnableLambda(lambda x: dict_answers)  # 学生の解答
+
+    rule_results_runnable = RunnableLambda(lambda x: jprompt.RULE_RESULTS)
+    schema_results_runnable = RunnableLambda(lambda x: jschema.SCHEMA_RESULTS)  # 採点構造
+    results_sample_runnable = RunnableLambda(lambda x: jschema.RESULTS_SAMPLE)  # 学生の回答に対する採点結果の例
+
+    prompt = ChatPromptTemplate.from_template('''\
+    以下の文脈だけを踏まえて質問に回答してください。
+
+    文脈:"""
+    {context}
+    """
+
+    問題:"""
+    {question}
+    """
+
+    採点ルール:"""
+    {rule}
+    """
+
+    質問:{query}
+
+    採点定義:"""
+    {schema_score}
+    """
+
+    学生の回答:"""
+    {answer}
+    """
+
+    採点結果構造の出力形式の例:"""
+    {answer_score}
+    """
+    ''')
+
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
+
+    chain = (
+            {"context": retriever, "question": questions_runnable, "rule": rule_results_runnable,
+             "query": RunnablePassthrough(), "schema_score": schema_results_runnable, "answer": answers_runnable,
+             "answer_score": results_sample_runnable}
+            | prompt
+            | llm
+            | StrOutputParser()
+            | replaced2json
+    )
+
+    query = f"`問題`の内容（正解、得点）元に`採点ルール`に基づき、`学生の回答`を採点してください。\n 採点結果は`採点定義`の形式で出力してください。"
+    # Json形式の採点結果作成
+    results_data = chain.invoke(query)
+
+    print(results_data, flush=True)
+
+    return results_data
+
+def create_homework_from_vector(db, start_page, finish_page, dict_answers):
+    return
 
 
 @chain
@@ -407,9 +503,64 @@ def convert_pdf_to_docs(file_path):
 
     return docs
 
+def prepare_page(dict_ref) -> Union[tuple[str, str, None], tuple[None, None, str]]:
+    lesson_path = "/".join([dict_ref.get('year',''), dict_ref.get('class',''), 'common', dict_ref.get('subject',''), 'lessons', dict_ref.get('lesson_id','')])
+    dict_field = Firestore.to_dict(lesson_path)
+
+    if not dict_field:
+        return None, None, "cant find lesson."
+
+    start_page = dict_field.get('start_page')
+    finish_page = dict_field.get('finish_page')
+
+    if start_page is None or finish_page is None:
+        return None, None, "cant find start_page/finish_page."
+
+    return start_page, finish_page, None
+
+def prepare_questions(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
+    lesson_path = "/".join([dict_ref.get('year',''), dict_ref.get('class',''), 'common', dict_ref.get('subject',''), 'lessons', dict_ref.get('lesson_id','')])
+    dict_field = Firestore.to_dict(lesson_path)
+
+    if not dict_field:
+        return None, "cant find lesson."
+
+    dict_questions = dict_field.get('questions_publish')
+
+    if dict_questions is None:
+        return None, "cant find questions_publish."
+
+    return dict_questions, None
+
+
+
+### For Chroma ###
+
+def prepare_chroma(dict_ref) -> Union[tuple[None, str], tuple[Chroma, None]]:
+    subject_path = "/".join([dict_ref.get('year',''), dict_ref.get('class',''), 'common', dict_ref.get('subject','')])
+    dict_field = Firestore.to_dict(subject_path)
+
+    if dict_field is None or dict_field == {}:
+        return None, "Failed find text path."
+
+    # ChromaDBをfirestoreから取得
+    text_chroma_path = dict_field.get('text_chroma')
+    if text_chroma_path is None:
+        return None, "Failed make agenda before making question."
+
+    # Chroma DB path
+    chroma_path = "/tmp/chroma"
+    # ChromaDBをfirestorageから取得
+    restore_chroma(text_chroma_path, chroma_path)
+    # ChromaDBを作成
+    db = create_chroma(chroma_path)
+
+    return db, None
+
+
 def store_chroma(persist_directory, dict_ref):
     # chromaディレクトリをZipファイル化
-    zip_filename = f"chroma_{dict_ref['year']}_{dict_ref['class']}_{dict_ref['subject']}.zip"
+    zip_filename = f"chroma_{dict_ref.get('year','year')}_{dict_ref.get('class','class')}_{dict_ref.get('subject','subject')}.zip"
     zip_path = f"/tmp/{zip_filename}"
     zip_directory(persist_directory, zip_path)
 
@@ -455,9 +606,9 @@ def parse_path(path):
     '''
     パスの各要素を解析する
     :param path: reference path
-    :return: object[year, class, student, subject, lessons, lesson_id]
+    :return: object[year, class, common, subject, lessons, lesson_id, students, student]
     '''
-    keys = ['year', 'class', 'student', 'subject', 'lessons', 'lesson_id']
+    keys = ['year', 'class', 'common', 'subject', 'lessons', 'lesson_id', 'students', 'student']
     path_parts = path.split('/')
 
     dict_path = {}
@@ -483,7 +634,8 @@ def parse_chat_path(path):
 
     return dict_path
 
-def created_response(reference, agenda=None, questions=None, results=None):
+def created_response(reference, agenda=None, questions=None, results=None,
+                     questions_result=None, homework=None, homework_result=None):
     response = {}
     response['reference'] = reference
 
@@ -494,6 +646,12 @@ def created_response(reference, agenda=None, questions=None, results=None):
         field['questions'] = questions
     if results is not None:
         field['results'] = results
+    if questions_result is not None:
+        field['questions_result'] = questions_result
+    if homework is not None:
+        field['homework'] = homework
+    if homework_result is not None:
+        field['homework_result'] = homework_result
     response['field'] = field
 
     return response, 200
@@ -519,3 +677,68 @@ def test_zip(request):
     shutil.rmtree("/tmp/chroma")
     unzip_file("/tmp/chroma.zip", "/tmp/chroma")
     return "OK", 200
+
+def test_store_value(request):
+    # JSONデータを取得
+    data = request.get_json()
+
+    reference = data.get('reference')
+    if reference is None:
+        return error_response(400, 'INPUT_ERROR', "reference is required.")
+
+    key = data.get('key')
+    if key is None:
+        return error_response(400, 'INPUT_ERROR', "key is required.")
+
+    value = data.get('value')
+    if value is None:
+        return error_response(400, 'INPUT_ERROR', "value is required.")
+
+    Firestore.set_field(reference, key, value)
+    return "OK", 200
+
+
+def test_copy_field(request):
+    # JSONデータを取得
+    data = request.get_json()
+
+    reference = data.get('reference')
+    if reference is None:
+        return error_response(400, 'INPUT_ERROR', "reference is required.")
+
+    fromKey = data.get('fromKey')
+    if fromKey is None:
+        return error_response(400, 'INPUT_ERROR', "fromKey is required.")
+
+    toKey = data.get('toKey')
+    if toKey is None:
+        return error_response(400, 'INPUT_ERROR', "toKey is required.")
+
+    dict_field = Firestore.to_dict(reference)
+    if not dict_field:
+        return error_response(400, 'INPUT_ERROR', "not exist reference.")
+
+    dict_fromKey = dict_field.get(fromKey)
+    if not dict_fromKey:
+        return error_response(400, 'INPUT_ERROR', "not exist fromKey field.")
+
+    Firestore.set_field(reference, toKey, dict_fromKey)
+    return "OK", 200
+
+def test_show_field(request):
+    # JSONデータを取得
+    data = request.get_json()
+
+    reference = data.get('reference')
+    if reference is None:
+        return error_response(400, 'INPUT_ERROR', "reference is required.")
+
+    key = data.get('key')
+    if key is None:
+        return error_response(400, 'INPUT_ERROR', "key is required.")
+
+    dict_field = Firestore.to_dict(reference)
+    if not dict_field:
+        return error_response(400, 'INPUT_ERROR', "not exist reference.")
+
+    return json.dumps(dict_field.get(key, []), ensure_ascii=False, sort_keys=True), 200

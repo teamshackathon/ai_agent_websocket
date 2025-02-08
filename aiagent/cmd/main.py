@@ -25,6 +25,14 @@ def cmd_create_agenda():
 def cmd_create_questions():
     return create_questions(request)
 
+@app.route('/answered_questions', methods=['POST'])
+def cmd_answered_questions():
+    return answered_questions(request)
+
+@app.route('/submit_homework', methods=['POST'])
+def cmd_submit_homework():
+    return submit_homework(request)
+
 @app.route('/test_firebase', methods=['GET'])
 def cmd_test_firebase():
     return test_firebase(request)
@@ -33,6 +41,18 @@ def cmd_test_firebase():
 def cmd_test_zip():
     return test_zip(request)
 
+@app.route('/test_store_value', methods=['POST'])
+def cmd_test_store_value():
+    return test_store_value(request)
+
+@app.route('/test_copy_field', methods=['POST'])
+def cmd_test_copy_field():
+    return test_copy_field(request)
+
+@app.route('/test_show_field', methods=['POST'])
+def cmd_test_show_field():
+    return test_show_field(request)
+
 if __name__ == '__main__':
-    app.debug = False
+    app.debug = True
     app.run(host='0.0.0.0', port=3001)

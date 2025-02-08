@@ -25,7 +25,7 @@ class Firestorage:
 
 class Firestore:
     # パス階層に応じて処理を行う関数
-    def to_list(path):
+    def to_list(path:str):
         doc_ref = Firestore.get_ref(path)
         if isinstance(doc_ref, firestore.CollectionReference):
             docs = doc_ref.stream()
@@ -39,19 +39,20 @@ class Firestore:
 
         return []
 
-    def to_dict(path):
+    def to_dict(path:str):
         doc_ref = Firestore.get_ref(path)
         if isinstance(doc_ref, firestore.CollectionReference):
             return {}
         elif isinstance(doc_ref, firestore.DocumentReference):
             doc = doc_ref.get()
             doc_dict = doc.to_dict()
-            doc_dict.pop('collections', None)
+            if doc_dict:
+                doc_dict.pop('collections', None)
             return doc_dict
 
         return {}
 
-    def get_ref(path):
+    def get_ref(path:str):
         if not path or path == '':
             return None
 
@@ -69,6 +70,6 @@ class Firestore:
 
         return doc_ref
 
-    def set_field(path, field, value):
+    def set_field(path:str, field, value):
         doc_ref = Firestore.get_ref(path)
         doc_ref.set({field: value}, merge=True)
