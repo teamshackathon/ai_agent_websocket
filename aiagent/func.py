@@ -274,8 +274,12 @@ def answered_questions(request):
     if dict_answers is None:
         return error_response(400, 'INPUT_ERROR', "cant find answers field.")
 
+    dict_agenda, err = prepare_agenda(dict_ref)
+    if err:
+        return error_response(400, 'SETTING_ERROR', err)
+
     dict_questions, err = prepare_questions(dict_ref)
-    if dict_questions is None:
+    if err:
         return error_response(400, 'SETTING_ERROR', err)
 
     start_page, finish_page, err = prepare_page(dict_ref)
@@ -293,9 +297,14 @@ def answered_questions(request):
     json_results = json.loads(results_data)
     Firestore.set_field(reference, result_field_name, json_results)
 
-    # TODO 宿題を作成
+    homework_data = create_homework_from_vector(db, start_page, finish_page, dict_agenda, dict_questions, results_data)
 
-    return created_response(reference, questions_result=result_field_name, homework='homework')
+    # 宿題格納フィールド名
+    homework_field_name = "homework"
+    json_homework = json.loads(homework_data)
+    Firestore.set_field(reference, homework_field_name, json_homework)
+
+    return created_response(reference, questions_result=result_field_name, homework=homework_field_name)
 
 
 @functions_framework.http
@@ -372,7 +381,7 @@ def create_agenda_from_vector(db, start_page, finish_page):
 def create_questions_from_vector(db, start_page, finish_page):
     retriever = db.as_retriever()
 
-    rule_test_runnable = RunnableLambda(lambda x: jprompt.RULE_QUESTIONS)
+    rule_questions_runnable = RunnableLambda(lambda x: jprompt.RULE_QUESTIONS)
     schema_questions_runnable = RunnableLambda(lambda x: jschema.SCHEMA_QUESTIONS)
     questions_sample_runnable = RunnableLambda(lambda x: jschema.QUESTIONS_SAMPLE)
 
@@ -403,7 +412,7 @@ def create_questions_from_vector(db, start_page, finish_page):
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
 
     chain = (
-            {"context": retriever, "question": RunnablePassthrough(), "rule": rule_test_runnable, "schema": schema_questions_runnable, "schema_sample": questions_sample_runnable}
+            {"context": retriever, "question": RunnablePassthrough(), "rule": rule_questions_runnable, "schema": schema_questions_runnable, "schema_sample": questions_sample_runnable}
             | prompt
             | llm
             | StrOutputParser()
@@ -472,12 +481,63 @@ def create_results_from_vector(db, start_page, finish_page, dict_questions, dict
     # Json形式の採点結果作成
     results_data = chain.invoke(query)
 
-    print(results_data, flush=True)
-
     return results_data
 
-def create_homework_from_vector(db, start_page, finish_page, dict_answers):
-    return
+def create_homework_from_vector(db, start_page, finish_page, dict_agenda, dict_questions, dict_results):
+    agenda_runnable = RunnableLambda(lambda x: dict_agenda) # 授業のアジェンダ
+    questions_runnable = RunnableLambda(lambda x: dict_questions) # 小テスト問題内容（小テストの正解・得点を使用する）
+    results_runnable = RunnableLambda(lambda x: dict_results) # 小テスト採点結果
+    rule_questions_runnable = RunnableLambda(lambda x: jprompt.RULE_QUESTIONS) # 問題作成時の共通ルール
+    rule_homework_runnable = RunnableLambda(lambda x: jprompt.RULE_HOMEWORK) # 宿題作成時のルール
+    schema_questions_runnable = RunnableLambda(lambda x: jschema.SCHEMA_QUESTIONS) # 小テストの構造定義
+    schema_questions_sample_runnable = RunnableLambda(lambda x: jschema.QUESTIONS_SAMPLE) # 小テストの構造例
+
+    prompt = ChatPromptTemplate.from_template('''\
+    質問:{query}
+    
+    出題のルール:"""
+    {rule1}
+    {rule2}
+    """
+    
+    アジェンダ:"""
+    {agenda}
+    """
+    
+    問題データ:"""
+    {question}
+    """
+    
+    採点結果:"""
+    {score}
+    """
+    
+    問題定義の出力形式:"""
+    {schema}
+    """
+    
+    問題定義の出力形式の例:"""
+    {schema_sample}
+    """
+    ''')
+
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
+
+    chain = (
+            {"query": RunnablePassthrough(), "rule1": rule_questions_runnable, "rule2": rule_homework_runnable,
+             "agenda": agenda_runnable, "question": questions_runnable, "score": results_runnable,
+             "schema": schema_questions_runnable, "schema_sample": schema_questions_sample_runnable}
+            | prompt
+            | llm
+            | StrOutputParser()
+            | replaced2json
+    )
+
+    query = f"`採点結果`から回答者の苦手な分野を特定し、その分野を克服できるような宿題を作成してください。"
+    # Json形式の採点結果作成
+    homework_data = chain.invoke(query)
+
+    return homework_data
 
 
 @chain
@@ -532,7 +592,19 @@ def prepare_questions(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
 
     return dict_questions, None
 
+def prepare_agenda(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
+    lesson_path = "/".join([dict_ref.get('year',''), dict_ref.get('class',''), 'common', dict_ref.get('subject',''), 'lessons', dict_ref.get('lesson_id','')])
+    dict_field = Firestore.to_dict(lesson_path)
 
+    if not dict_field:
+        return None, "cant find lesson."
+
+    dict_agenda = dict_field.get('agenda_publish')
+
+    if dict_agenda is None:
+        return None, "cant find agenda_publish."
+
+    return dict_agenda, None
 
 ### For Chroma ###
 
