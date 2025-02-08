@@ -282,22 +282,18 @@ def answered_questions(request):
     if err:
         return error_response(400, 'SETTING_ERROR', err)
 
-    start_page, finish_page, err = prepare_page(dict_ref)
-    if err:
-        return error_response(400, 'SETTING_ERROR', err)
-
     db, err = prepare_chroma(dict_ref)
     if err:
         return error_response(400, 'SETTING_ERROR', err)
 
-    results_data = create_results_from_vector(db, start_page, finish_page, dict_questions, dict_answers)
+    results_data = create_results_from_vector(db, dict_questions, dict_answers)
 
     # 小テスト採点結果格納フィールド名
     result_field_name = "questions_result"
     json_results = json.loads(results_data)
     Firestore.set_field(reference, result_field_name, json_results)
 
-    homework_data = create_homework_from_vector(db, start_page, finish_page, dict_agenda, dict_questions, results_data)
+    homework_data = create_homework_from_vector(dict_agenda, dict_questions, results_data)
 
     # 宿題格納フィールド名
     homework_field_name = "homework"
@@ -313,10 +309,32 @@ def submit_homework(request):
     data = request.get_json()
 
     reference = data.get('reference')
+    if reference is None:
+        return error_response(400, 'INPUT_ERROR', "reference is required.")
 
-    # TODO 宿題採点
+    dict_ref = parse_path(str(reference))
+    dict_ref_field = Firestore.to_dict(reference)
 
-    return created_response(reference, homework_result='homework_result')
+    dict_answers = dict_ref_field.get('homework_answers')
+    if dict_answers is None:
+        return error_response(400, 'INPUT_ERROR', "cant find homework_answers field.")
+
+    dict_homework, err = prepare_homework(dict_ref)
+    if err:
+        return error_response(400, 'SETTING_ERROR', err)
+
+    db, err = prepare_chroma(dict_ref)
+    if err:
+        return error_response(400, 'SETTING_ERROR', err)
+
+    results_data = create_homework_results_from_vector(db, dict_homework, dict_answers)
+
+    # 小テスト採点結果格納フィールド名
+    result_field_name = "homework_result"
+    json_results = json.loads(results_data)
+    Firestore.set_field(reference, result_field_name, json_results)
+
+    return created_response(reference, homework_result=result_field_name)
 
 
 ### langchain functions ###
@@ -338,6 +356,7 @@ def create_chroma(chroma_path, docs=None):
         # ドキュメントをドキュメント化し、保存
         db.add_documents(documents=docs, embedding=embeddings)
     return db
+
 
 def create_agenda_from_vector(db, start_page, finish_page):
     retriever = db.as_retriever()
@@ -425,7 +444,8 @@ def create_questions_from_vector(db, start_page, finish_page):
 
     return questions_data
 
-def create_results_from_vector(db, start_page, finish_page, dict_questions, dict_answers):
+
+def create_results_from_vector(db, dict_questions, dict_answers):
     retriever = db.as_retriever()
 
     questions_runnable = RunnableLambda(lambda x: dict_questions)  # 小テスト問題内容（小テストの正解・得点を使用する）
@@ -477,20 +497,22 @@ def create_results_from_vector(db, start_page, finish_page, dict_questions, dict
             | replaced2json
     )
 
-    query = f"`問題`の内容（正解、得点）元に`採点ルール`に基づき、`学生の回答`を採点してください。\n 採点結果は`採点定義`の形式で出力してください。"
+    query = f"`問題`の内容（正解、得点）元に`採点ルール`に基づき、`学生の回答`を採点してください。\n採点結果は`採点定義`の形式で出力してください。"
     # Json形式の採点結果作成
     results_data = chain.invoke(query)
 
     return results_data
 
-def create_homework_from_vector(db, start_page, finish_page, dict_agenda, dict_questions, dict_results):
+
+def create_homework_from_vector(dict_agenda, dict_questions, dict_results):
     agenda_runnable = RunnableLambda(lambda x: dict_agenda) # 授業のアジェンダ
     questions_runnable = RunnableLambda(lambda x: dict_questions) # 小テスト問題内容（小テストの正解・得点を使用する）
     results_runnable = RunnableLambda(lambda x: dict_results) # 小テスト採点結果
+
     rule_questions_runnable = RunnableLambda(lambda x: jprompt.RULE_QUESTIONS) # 問題作成時の共通ルール
     rule_homework_runnable = RunnableLambda(lambda x: jprompt.RULE_HOMEWORK) # 宿題作成時のルール
     schema_questions_runnable = RunnableLambda(lambda x: jschema.SCHEMA_QUESTIONS) # 小テストの構造定義
-    schema_questions_sample_runnable = RunnableLambda(lambda x: jschema.QUESTIONS_SAMPLE) # 小テストの構造例
+    questions_sample_runnable = RunnableLambda(lambda x: jschema.QUESTIONS_SAMPLE) # 小テストの構造例
 
     prompt = ChatPromptTemplate.from_template('''\
     質問:{query}
@@ -526,7 +548,7 @@ def create_homework_from_vector(db, start_page, finish_page, dict_agenda, dict_q
     chain = (
             {"query": RunnablePassthrough(), "rule1": rule_questions_runnable, "rule2": rule_homework_runnable,
              "agenda": agenda_runnable, "question": questions_runnable, "score": results_runnable,
-             "schema": schema_questions_runnable, "schema_sample": schema_questions_sample_runnable}
+             "schema": schema_questions_runnable, "schema_sample": questions_sample_runnable}
             | prompt
             | llm
             | StrOutputParser()
@@ -540,11 +562,73 @@ def create_homework_from_vector(db, start_page, finish_page, dict_agenda, dict_q
     return homework_data
 
 
+def create_homework_results_from_vector(db, dict_homework, dict_answers):
+    retriever = db.as_retriever()
+
+    homework_runnable = RunnableLambda(lambda x: dict_homework) # 宿題内容（宿題の正解・得点を使用する）
+    answers_runnable = RunnableLambda(lambda x: dict_answers) # 学生の解答
+
+    rule_results_runnable = RunnableLambda(lambda x: jprompt.RULE_RESULTS) # 採点ルールの定義
+    schema_result_runnable = RunnableLambda(lambda x: jschema.SCHEMA_RESULTS) # 採点構造
+    results_sample_runnable = RunnableLambda(lambda x: jschema.RESULTS_SAMPLE) # 学生の回答に対する採点結果構造の例
+
+    prompt = ChatPromptTemplate.from_template('''\
+    以下の文脈だけを踏まえて質問に回答してください。
+    
+    文脈:"""
+    {context}
+    """
+    
+    問題:"""
+    {homework}
+    """
+    
+    採点ルール:"""
+    {rule}
+    """
+    
+    質問:{query}
+    
+    採点定義:"""
+    {schema_score}
+    """
+    
+    学生の回答:"""
+    {answer}
+    """
+    
+    採点結果構造の出力形式の例:"""
+    {answer_score}
+    """
+    ''')
+
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
+
+    chain = (
+            {"context": retriever, "homework": homework_runnable, "rule": rule_results_runnable,
+             "query": RunnablePassthrough(), "schema_score": schema_result_runnable, "answer": answers_runnable,
+             "answer_score": results_sample_runnable}
+            | prompt
+            | llm
+            | StrOutputParser()
+            | replaced2json
+    )
+
+    query = f"`問題`の内容（正解、得点）元に`採点ルール`に基づき、`学生の回答`を採点してください。\n採点結果は`採点定義`の形式で出力してください。"
+    # Json形式の採点結果作成
+    homework_data = chain.invoke(query)
+
+    return homework_data
+
+
 @chain
 def replaced2json(output: str) -> str:
   replaced_output = output.replace('```json', '').replace('```', '')
   # replaced_output = json.loads(replaced_output) # これを加えるとdict型になってしまう
   return replaced_output
+
+
+### Making Resource ###
 
 def convert_pdf_to_docs(file_path):
     model = genai.GenerativeModel("gemini-2.0-flash-exp")
@@ -578,6 +662,20 @@ def prepare_page(dict_ref) -> Union[tuple[str, str, None], tuple[None, None, str
 
     return start_page, finish_page, None
 
+def prepare_agenda(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
+    lesson_path = "/".join([dict_ref.get('year',''), dict_ref.get('class',''), 'common', dict_ref.get('subject',''), 'lessons', dict_ref.get('lesson_id','')])
+    dict_field = Firestore.to_dict(lesson_path)
+
+    if not dict_field:
+        return None, "cant find lesson."
+
+    dict_agenda = dict_field.get('agenda_publish')
+
+    if dict_agenda is None:
+        return None, "cant find agenda_publish."
+
+    return dict_agenda, None
+
 def prepare_questions(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
     lesson_path = "/".join([dict_ref.get('year',''), dict_ref.get('class',''), 'common', dict_ref.get('subject',''), 'lessons', dict_ref.get('lesson_id','')])
     dict_field = Firestore.to_dict(lesson_path)
@@ -592,19 +690,19 @@ def prepare_questions(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
 
     return dict_questions, None
 
-def prepare_agenda(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
-    lesson_path = "/".join([dict_ref.get('year',''), dict_ref.get('class',''), 'common', dict_ref.get('subject',''), 'lessons', dict_ref.get('lesson_id','')])
-    dict_field = Firestore.to_dict(lesson_path)
+def prepare_homework(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
+    student_path = "/".join([dict_ref.get('year',''), dict_ref.get('class',''), 'common', dict_ref.get('subject',''), 'lessons', dict_ref.get('lesson_id',''), 'students', dict_ref.get('student')])
+    dict_field = Firestore.to_dict(student_path)
 
     if not dict_field:
-        return None, "cant find lesson."
+        return None, "cant find student."
 
-    dict_agenda = dict_field.get('agenda_publish')
+    dict_homework = dict_field.get('homework')
 
-    if dict_agenda is None:
-        return None, "cant find agenda_publish."
+    if dict_homework is None:
+        return None, "cant find homework."
 
-    return dict_agenda, None
+    return dict_homework, None
 
 ### For Chroma ###
 
