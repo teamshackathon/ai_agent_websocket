@@ -1,18 +1,19 @@
 package function
 
 import (
-	"cloud.google.com/go/speech/apiv1"
-	"cloud.google.com/go/vertexai/genai"
 	"context"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/gorilla/websocket"
-	speechpb "google.golang.org/genproto/googleapis/cloud/speech/v1"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
+
+	speech "cloud.google.com/go/speech/apiv1"
+	"cloud.google.com/go/vertexai/genai"
+	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
+	speechpb "google.golang.org/genproto/googleapis/cloud/speech/v1"
 )
 
 // グローバルクライアント
@@ -38,7 +39,7 @@ func getGeminiClient() (*genai.Client, error) {
 		location := "asia-northeast1"
 
 		ctx := context.Background()
-		genaiClient, err = genai.NewClient(ctx, os.Getenv("GCP_PROJECT"), location)
+		genaiClient, err = genai.NewClient(ctx, os.Getenv("GOOGLE_PROJECT_ID"), location)
 	})
 	return genaiClient, err
 }
@@ -62,13 +63,16 @@ func Main(w http.ResponseWriter, r *http.Request) {
 }
 
 func setResponseHeaders(w http.ResponseWriter, r *http.Request) {
-	origin := r.Header.Get("Origin")
-	coses := strings.Split(os.Getenv("COSE_ORIGIN"), ",")
-	for _, v := range coses {
-		// 特定のオリジンのみ許可
-		if origin == v {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			break
+	cose_hosts := os.Getenv("COSE_ORIGIN")
+	if cose_hosts != "" {
+		origin := r.Header.Get("Origin")
+		coses := strings.Split(cose_hosts, ",")
+		for _, v := range coses {
+			// 特定のオリジンのみ許可
+			if origin == v {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				break
+			}
 		}
 	}
 
@@ -77,10 +81,14 @@ func setResponseHeaders(w http.ResponseWriter, r *http.Request) {
 }
 
 var upgrader = websocket.Upgrader{
-	/** デバックの為コメントアウト
 	CheckOrigin: func(r *http.Request) bool {
+		cose_hosts := os.Getenv("COSE_ORIGIN")
+		if cose_hosts == "" {
+			return true
+		}
+
 		origin := r.Header.Get("Origin")
-		coses := strings.Split(os.Getenv("COSE_ORIGIN"), ",")
+		coses := strings.Split(cose_hosts, ",")
 		for _, v := range coses {
 			// 特定のオリジンのみ許可
 			if origin == v {
@@ -88,7 +96,7 @@ var upgrader = websocket.Upgrader{
 			}
 		}
 		return false
-	},*/
+	},
 }
 
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {

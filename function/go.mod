@@ -1,4 +1,4 @@
-module gc-hackathon.ai/function
+module manabiya.ai/function
 
 go 1.22
 

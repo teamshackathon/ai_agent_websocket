@@ -157,40 +157,17 @@ export default function Home() {
     // ステートに保存（クライアントで再生可能にする）
     setAudioURLs((prev) => [...prev, audioURL]);
 
-    const promise = blobToBase64(audioBlob);
-    promise.then((base64Audio) => {
-      if(base64Audio) {
-        // WebSocket経由で送信
-        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-          socketRef.current.send(base64Audio); // base64Audio をWebSocketで送信
-          console.log('Audio data sent via WebSocket');
-        } else {
-          console.error('WebSocket is not open');
-        }
-      }
-    });
+    // WebSocket経由で送信
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(audioBlob);
+      console.log('Audio data sent via WebSocket');
+    } else {
+      console.error('WebSocket is not open');
+    }
 
     console.log('chunks close.');
     // チャンクをリセット
     audioChunksRef.current = [];
-  };
-
-  const blobToBase64 = async (blob: Blob): Promise<string | undefined> => {
-    const reader = new FileReader();
-
-    return new Promise((resolve, reject) => {
-      reader.onload = () => {
-        console.log('Encoding audio blob to Base64...');
-        resolve(reader.result?.toString().split(",")[1]);
-      };
-
-      reader.onerror = function (error) {
-        console.error('Error encoding audio blob to Base64:', error);
-        reject(error);
-      };
-
-      reader.readAsDataURL(blob); // BlobデータをBase64形式に変換
-    });
   };
 
   return (

@@ -5,7 +5,6 @@ import os
 import json
 from typing import Dict, Tuple, Union
 
-import functions_framework
 import google.generativeai as genai
 from langchain_chroma import Chroma
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
@@ -21,14 +20,12 @@ import jschema
 import jprompt
 from firebase import Firestore, Firestorage
 
-
 class Recipe(BaseModel):
     ingredients: list[str] = Field(description="ingredients of the dish")
     steps: list[str] = Field(description="steps to make the dish")
 
 output_parser = PydanticOutputParser(pydantic_object=Recipe)
 
-@functions_framework.http
 def hello_ai(request):
     model = GoogleGenerativeAI(model="gemini-2.0-flash-exp")
     output = model.invoke("自己紹介をしてください。")
@@ -36,7 +33,6 @@ def hello_ai(request):
 
     return (f"Hello AI. \n <pre>{output}</pre>"), 200
 
-@functions_framework.http
 def chat_ai_as_student(request):
 
     # JSONデータを取得
@@ -95,7 +91,7 @@ def chat_ai_as_student(request):
 
     return output, 200
 
-@functions_framework.http
+
 def chat_ai_as_teacher(request):
 
     # JSONデータを取得
@@ -155,7 +151,6 @@ def chat_ai_as_teacher(request):
     return output, 200
     
 
-@functions_framework.http
 def create_agenda(request):
     # JSONデータを取得
     data = request.get_json()
@@ -225,7 +220,6 @@ def create_agenda(request):
     return created_response(reference, agenda=field_name)
 
 
-@functions_framework.http
 def create_questions(request):
     # JSONデータを取得
     data = request.get_json()
@@ -258,7 +252,6 @@ def create_questions(request):
     return created_response(reference, questions=field_name)
 
 
-@functions_framework.http
 def answered_questions(request):
     # JSONデータを取得
     data = request.get_json()
@@ -303,7 +296,6 @@ def answered_questions(request):
     return created_response(reference, questions_result=result_field_name, homework=homework_field_name)
 
 
-@functions_framework.http
 def submit_homework(request):
     # JSONデータを取得
     data = request.get_json()
@@ -375,7 +367,6 @@ def create_agenda_from_vector(db, start_page, finish_page):
     出力形式:"""
     {schema_agenda}
     """
-    
     ''')
 
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
