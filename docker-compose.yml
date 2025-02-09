@@ -10,6 +10,8 @@ services:
       - "3002:3002"
     volumes:
       - ./function:/app
+    environment:
+      DEVELOP: true
   webui:
     build: ./webui
     container_name: webui
@@ -23,9 +25,11 @@ services:
     build: ./aiagent
     container_name: aiagent
     ports:
-      - "3001:3001"  
+      - "3001:3001"
     volumes:
       - ./aiagent:/app
+    environment:
+      DEVELOP: true
   swagger-editor:
     image: swaggerapi/swagger-editor
     container_name: "swagger-editor"

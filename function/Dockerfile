@@ -6,12 +6,14 @@ WORKDIR /app
 
 # Goの依存関係をコピー
 COPY go.mod go.sum ./
-
 # 依存関係をインストール
 RUN go mod tidy
 
-# HTTPポートを公開
-EXPOSE 3002
+# アプリケーションのソースコードをコピー
+COPY . .
 
-# アプリケーションを実行
+# アプリケーションをビルド
+RUN go build -o cmd/main .
+
+ENTRYPOINT ["sh", "entrypoint.sh"]
 CMD ["go", "run", "cmd/main.go"]

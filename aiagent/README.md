@@ -24,8 +24,7 @@
 
 ### 各種 URL
 
-Hello AI: [http://localhost:3001/](http://localhost:3001/)\
-教科書読込: [http://localhost:3001/process_file](http://localhost:3001/process_file)
+[API仕様](http://localhost:8001)
 
 ### デバック起動
 
@@ -35,4 +34,32 @@ export GOOGLE_API_KEY=$(cat cert/google_gemini.pem) &&\
 export LANGCHAIN_API_KEY=$(cat cert/langchain.pem) &&\
 export $(sed 's/host.docker.internal/localhost/g' .env.develop | xargs) &&\
 python cmd/main.py
+```
+
+## Cloud Run にデプロイする
+
+### コンテナイメージをビルドする
+
+```bash
+export $(cat .env.production | xargs) &&\
+gcloud builds submit --tag gcr.io/$GOOGLE_PROJECT_ID/aiagent-app .
+```
+
+### Google Cloud Run にデプロイする
+
+```bash
+gcloud run deploy aiagent-app \
+  --image gcr.io/$GOOGLE_PROJECT_ID/aiagent-app \
+  --platform managed \
+  --region asia-northeast1 \
+  --service-account $GOOGLE_SERVICE_ACCOUNT \
+  --allow-unauthenticated
+```
+
+ ### Firebase へのアクセス権限を追加
+
+```bash
+gcloud projects add-iam-policy-binding $GOOGLE_PROJECT_ID \
+  --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" \
+  --role="roles/firebase.admin"
 ```

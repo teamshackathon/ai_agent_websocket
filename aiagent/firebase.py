@@ -6,18 +6,20 @@ import firebase_admin
 firebase_admin.initialize_app(options={"projectId": os.getenv("FIREBASE_PROJECT_ID")})
 store_client = firestore.client()
 
+hostname = os.getenv("FIREBASE_PROJECT_ID") + '.' + os.getenv("FIREBASE_STORAGE_DOMAIN")
+
 class Firestorage:
     # Firebase Storageからファイルを取得する関数
     def get_bytes(blob_path):
         # Firebase Storageのバケットにアクセス
-        name = os.getenv("FIREBASE_PROJECT_ID") + '.appspot.com'
+        name = hostname
         bucket = storage.bucket(name)
         # バケットからBlobを取得
         blob = bucket.blob(blob_path)
         return blob.download_as_bytes()
 
     def put_file(blob_path, filename):
-        name = os.getenv("FIREBASE_PROJECT_ID") + '.appspot.com'
+        name = hostname
         bucket = storage.bucket(name)
         # バケットにBlobをアップロード
         blob = bucket.blob(blob_path)

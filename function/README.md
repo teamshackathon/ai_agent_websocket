@@ -47,24 +47,21 @@ gcloud projects add-iam-policy-binding $(Project ID) \
 gcloud config set project $(Project ID)
 ```
 
-### Cloud Function Deploy 時コマンド
+### コンテナイメージをビルドする
+
 ```bash
-export $(cat .env.production | xargs) && \
-gcloud functions deploy minting-function \
-    --gen2 \
-    --runtime=go122 \
-    --region=asia-northeast1 \
-    --source=. \
-    --entry-point=HandleWebSocket \
-    --trigger-http \
-    --allow-unauthenticated \
-    --service-account $GOOGLE_SERVICE_ACCOUNT
+export $(cat .env.production | xargs) &&\
+gcloud builds submit --tag gcr.io/$GOOGLE_PROJECT_ID/aiagent-websocket .
 ```
 
-### Cloud Function 環境変数設定コマンド
-```bash
-export $(cat .env.production | xargs) && \
-gcloud functions deploy minting-function \
-    --update-env-vars GCP_PROJECT=$GCP_PROJECT,COSE_ORIGIN=$COSE_ORIGIN
-```
+### Google Cloud Run にデプロイする
 
+```bash
+export $(cat .env.production | xargs) &&\
+gcloud run deploy aiagent-websocket \
+  --image gcr.io/$GOOGLE_PROJECT_ID/aiagent-websocket \
+  --platform managed \
+  --region asia-northeast1 \
+  --service-account $GOOGLE_SERVICE_ACCOUNT \
+  --allow-unauthenticated
+```

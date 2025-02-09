@@ -54,5 +54,6 @@ def cmd_test_show_field():
     return test_show_field(request)
 
 if __name__ == '__main__':
-    app.debug = True
-    app.run(host='0.0.0.0', port=3001)
+    app.debug = False
+    app.run(host='0.0.0.0', port=os.getenv("SERVICE_PORT"))
+
