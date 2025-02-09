@@ -3,7 +3,8 @@ import zipfile
 import shutil
 import os
 import json
-from typing import Dict, Tuple, Union
+import re
+from typing import Dict, Union
 
 import google.generativeai as genai
 from langchain_chroma import Chroma
@@ -348,8 +349,6 @@ def create_chroma(chroma_path, docs=None):
 def create_agenda_from_vector(db, start_page, finish_page):
     retriever = db.as_retriever()
 
-    schema_agenda_runnable = RunnableLambda(lambda x: jschema.SCHEMA_AGENDA)
-
     prompt = ChatPromptTemplate.from_template('''\
     以下の文脈だけを踏まえて質問に回答してください。
 
@@ -367,17 +366,21 @@ def create_agenda_from_vector(db, start_page, finish_page):
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
 
     chain = (
-        {"context": retriever, "question": RunnablePassthrough(), "schema_agenda": schema_agenda_runnable}
-        | prompt
-        | llm
-        # | class2json
-        | StrOutputParser()
-        | replaced2json
-        # | json2dict
+            {
+                "context": retriever,
+                "question": RunnablePassthrough(),
+                "schema_agenda": RunnableLambda(lambda x: jschema.SCHEMA_AGENDA)
+            }
+            | prompt
+            | llm
+            # | class2json
+            | StrOutputParser()
+            | replaced2json
+            # | json2dict
     )
 
-    query = f"今回の授業は{start_page}ページから{finish_page}ページを学習します。授業時間は40分です。授業のアジェンダを作成してください。"
-    # Json形式のアジェンダ作成
+    query = f"今回の授業は**{start_page}ページ**から**{finish_page}ページ**を学習します。授業時間は40分です。授業のアジェンダを作成してください。"
+    # JSON形式のアジェンダ作成
     agenda_data = chain.invoke(query)
     print(agenda_data, flush=True)
 
@@ -386,10 +389,6 @@ def create_agenda_from_vector(db, start_page, finish_page):
 
 def create_questions_from_vector(db, start_page, finish_page):
     retriever = db.as_retriever()
-
-    rule_questions_runnable = RunnableLambda(lambda x: jprompt.RULE_QUESTIONS)
-    schema_questions_runnable = RunnableLambda(lambda x: jschema.SCHEMA_QUESTIONS)
-    questions_sample_runnable = RunnableLambda(lambda x: jschema.QUESTIONS_SAMPLE)
 
     # TODO 授業音声を取り込んで問題に反映させる
 
@@ -418,15 +417,21 @@ def create_questions_from_vector(db, start_page, finish_page):
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
 
     chain = (
-            {"context": retriever, "question": RunnablePassthrough(), "rule": rule_questions_runnable, "schema": schema_questions_runnable, "schema_sample": questions_sample_runnable}
+            {
+                "context": retriever,
+                "question": RunnablePassthrough(),
+                "rule": RunnableLambda(lambda x: jprompt.RULE_QUESTIONS),
+                "schema": RunnableLambda(lambda x: jschema.SCHEMA_QUESTIONS),
+                "schema_sample": RunnableLambda(lambda x: jschema.QUESTIONS_SAMPLE)
+            }
             | prompt
             | llm
             | StrOutputParser()
             | replaced2json
     )
 
-    query = f"授業の小テストを作成します。`文脈`の**page {start_page}**から**page {finish_page}**の内容を元に問題を**4題以上**作成してください。問題の重要度を鑑みて`出力形式`の`score`の点数設定をしてください。"
-    # Json形式の小テスト作成
+    query = f"授業の小テストを作成します。`文脈`の**{start_page}ページ**から**{finish_page}ページ**の内容を元に問題を**4題以上**作成してください。問題の重要度を鑑みて`出力形式`の`score`の点数設定をしてください。"
+    # JSON形式の小テスト作成
     questions_data = chain.invoke(query)
     print(questions_data, flush=True)
 
@@ -435,13 +440,6 @@ def create_questions_from_vector(db, start_page, finish_page):
 
 def create_questions_result_from_vector(db, dict_questions, dict_answers):
     retriever = db.as_retriever()
-
-    questions_runnable = RunnableLambda(lambda x: dict_questions)  # 小テスト問題内容（小テストの正解・得点を使用する）
-    answers_runnable = RunnableLambda(lambda x: dict_answers)  # 学生の解答
-
-    rule_results_runnable = RunnableLambda(lambda x: jprompt.RULE_RESULTS)
-    schema_results_runnable = RunnableLambda(lambda x: jschema.SCHEMA_RESULTS)  # 採点構造
-    results_sample_runnable = RunnableLambda(lambda x: jschema.RESULTS_SAMPLE)  # 学生の回答に対する採点結果の例
 
     prompt = ChatPromptTemplate.from_template('''\
     以下の文脈だけを踏まえて質問に回答してください。
@@ -476,17 +474,23 @@ def create_questions_result_from_vector(db, dict_questions, dict_answers):
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
 
     chain = (
-            {"context": retriever, "question": questions_runnable, "rule": rule_results_runnable,
-             "query": RunnablePassthrough(), "schema_score": schema_results_runnable, "answer": answers_runnable,
-             "answer_score": results_sample_runnable}
+            {
+                "context": retriever,
+                "question": RunnableLambda(lambda x: dict_questions),  # 小テスト問題内容（小テストの正解・得点を使用する）
+                "rule": RunnableLambda(lambda x: jprompt.RULE_RESULTS),
+                "query": RunnablePassthrough(),
+                "schema_score": RunnableLambda(lambda x: jschema.SCHEMA_RESULTS),  # 採点構造
+                "answer": RunnableLambda(lambda x: dict_answers),  # 学生の解答
+                "answer_score": RunnableLambda(lambda x: jschema.RESULTS_SAMPLE)  # 学生の回答に対する採点結果の例
+            }
             | prompt
             | llm
             | StrOutputParser()
             | replaced2json
     )
 
-    query = f"`問題`の内容（正解、得点）元に`採点ルール`に基づき、`学生の回答`を採点してください。\n採点結果は`採点定義`の形式で出力してください。"
-    # Json形式の採点結果作成
+    query = f"`問題`の内容（正解、得点）元に`採点ルール`に基づき、`学生の回答`を採点してください。採点結果は`採点定義`の形式で出力してください。"
+    # JSON形式の採点結果作成
     results_data = chain.invoke(query)
     print(results_data, flush=True)
 
@@ -494,15 +498,6 @@ def create_questions_result_from_vector(db, dict_questions, dict_answers):
 
 
 def create_homeworks_from_vector(dict_agenda, dict_questions, dict_results):
-    agenda_runnable = RunnableLambda(lambda x: dict_agenda) # 授業のアジェンダ
-    questions_runnable = RunnableLambda(lambda x: dict_questions) # 小テスト問題内容（小テストの正解・得点を使用する）
-    results_runnable = RunnableLambda(lambda x: dict_results) # 小テスト採点結果
-
-    rule_questions_runnable = RunnableLambda(lambda x: jprompt.RULE_QUESTIONS) # 問題作成時の共通ルール
-    rule_homework_runnable = RunnableLambda(lambda x: jprompt.RULE_HOMEWORK) # 宿題作成時のルール
-    schema_questions_runnable = RunnableLambda(lambda x: jschema.SCHEMA_QUESTIONS) # 小テストの構造定義
-    questions_sample_runnable = RunnableLambda(lambda x: jschema.QUESTIONS_SAMPLE) # 小テストの構造例
-
     prompt = ChatPromptTemplate.from_template('''\
     質問:{query}
     
@@ -535,9 +530,16 @@ def create_homeworks_from_vector(dict_agenda, dict_questions, dict_results):
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
 
     chain = (
-            {"query": RunnablePassthrough(), "rule1": rule_questions_runnable, "rule2": rule_homework_runnable,
-             "agenda": agenda_runnable, "question": questions_runnable, "score": results_runnable,
-             "schema": schema_questions_runnable, "schema_sample": questions_sample_runnable}
+            {
+                "query": RunnablePassthrough(),
+                "rule1": RunnableLambda(lambda x: jprompt.RULE_QUESTIONS), # 問題作成時の共通ルール
+                "rule2": RunnableLambda(lambda x: jprompt.RULE_HOMEWORKS), # 宿題作成時のルール
+                "agenda": RunnableLambda(lambda x: dict_agenda), # 授業のアジェンダ
+                "question": RunnableLambda(lambda x: dict_questions), # 小テスト問題内容（小テストの正解・得点を使用する）
+                "score": RunnableLambda(lambda x: dict_results), # 小テスト採点結果
+                "schema": RunnableLambda(lambda x: jschema.SCHEMA_QUESTIONS), # 小テストの構造定義
+                "schema_sample": RunnableLambda(lambda x: jschema.QUESTIONS_SAMPLE) # 小テストの構造例
+            }
             | prompt
             | llm
             | StrOutputParser()
@@ -545,7 +547,7 @@ def create_homeworks_from_vector(dict_agenda, dict_questions, dict_results):
     )
 
     query = f"`採点結果`から回答者の苦手な分野を特定し、その分野を克服できるような宿題を作成してください。"
-    # Json形式の採点結果作成
+    # JSON形式の採点結果作成
     homework_data = chain.invoke(query)
     print(homework_data, flush=True)
 
@@ -554,13 +556,6 @@ def create_homeworks_from_vector(dict_agenda, dict_questions, dict_results):
 
 def create_homeworks_result_from_vector(db, dict_homework, dict_answers):
     retriever = db.as_retriever()
-
-    homework_runnable = RunnableLambda(lambda x: dict_homework) # 宿題内容（宿題の正解・得点を使用する）
-    answers_runnable = RunnableLambda(lambda x: dict_answers) # 学生の解答
-
-    rule_results_runnable = RunnableLambda(lambda x: jprompt.RULE_RESULTS) # 採点ルールの定義
-    schema_result_runnable = RunnableLambda(lambda x: jschema.SCHEMA_RESULTS) # 採点構造
-    results_sample_runnable = RunnableLambda(lambda x: jschema.RESULTS_SAMPLE) # 学生の回答に対する採点結果構造の例
 
     prompt = ChatPromptTemplate.from_template('''\
     以下の文脈だけを踏まえて質問に回答してください。
@@ -595,17 +590,23 @@ def create_homeworks_result_from_vector(db, dict_homework, dict_answers):
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp")
 
     chain = (
-            {"context": retriever, "homework": homework_runnable, "rule": rule_results_runnable,
-             "query": RunnablePassthrough(), "schema_score": schema_result_runnable, "answer": answers_runnable,
-             "answer_score": results_sample_runnable}
+            {
+                "context": retriever,
+                "homework": RunnableLambda(lambda x: dict_homework), # 宿題内容（宿題の正解・得点を使用する）
+                "rule": RunnableLambda(lambda x: jprompt.RULE_RESULTS), # 採点ルールの定義
+                "query": RunnablePassthrough(),
+                "schema_score": RunnableLambda(lambda x: jschema.SCHEMA_RESULTS), # 採点構造
+                "answer": RunnableLambda(lambda x: dict_answers), # 学生の解答
+                "answer_score": RunnableLambda(lambda x: jschema.RESULTS_SAMPLE) # 学生の回答に対する採点結果構造の例
+            }
             | prompt
             | llm
             | StrOutputParser()
             | replaced2json
     )
 
-    query = f"`問題`の内容（正解、得点）元に`採点ルール`に基づき、`学生の回答`を採点してください。\n採点結果は`採点定義`の形式で出力してください。"
-    # Json形式の採点結果作成
+    query = f"`問題`の内容（正解、得点）元に`採点ルール`に基づき、`学生の回答`を採点してください。採点結果は`採点定義`の形式で出力してください。"
+    # JSON形式の採点結果作成
     homework_data = chain.invoke(query)
     print(homework_data, flush=True)
 
@@ -615,6 +616,10 @@ def create_homeworks_result_from_vector(db, dict_homework, dict_answers):
 @chain
 def replaced2json(output: str) -> str:
   replaced_output = output.replace('```json', '').replace('```', '')
+  # 正規表現を使って空白行（改行だけや空白のみの行）を削除
+  replaced_output = re.sub(r'^\s*\n', '', replaced_output, flags=re.MULTILINE)
+  # 正規表現を使って最後のカンマを削除
+  replaced_output = re.sub(r',\s*$', '', replaced_output)
   # replaced_output = json.loads(replaced_output) # これを加えるとdict型になってしまう
   return replaced_output
 
@@ -809,7 +814,7 @@ def parse_chat_path(path):
 
     return dict_path
 
-def created_response(reference, agenda=None, questions=None, questions_result=None, homeworks=None, homeworks_result=None):
+def created_response(reference, agenda=None, questions=None, questions_result=None, homeworks=None, homeworks_result=None, summary=None):
     response = {}
     response['reference'] = reference
 
@@ -824,6 +829,8 @@ def created_response(reference, agenda=None, questions=None, questions_result=No
         field['homeworks'] = homeworks
     if homeworks_result is not None:
         field['homeworks_result'] = homeworks_result
+    if summary is not None:
+        field['summary'] = summary
     response['field'] = field
 
     return response, 200
