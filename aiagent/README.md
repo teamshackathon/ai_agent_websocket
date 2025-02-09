@@ -63,3 +63,9 @@ gcloud projects add-iam-policy-binding $GOOGLE_PROJECT_ID \
   --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" \
   --role="roles/firebase.admin"
 ```
+
+### Fire storage　の CORS 設定
+
+```bash
+gsutil cors set cors.json gs://manabiyaai.firebasestorage.app
+```

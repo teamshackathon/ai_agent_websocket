@@ -9,6 +9,7 @@ langchain-text-splitters==0.2.4
 langchain-chroma==0.2.1
 chromadb==0.6.3
 flask==2.0.1
+flask_cors==5.0.0
 werkzeug==2.0.1
 flasgger==0.9.7.1
 firebase-admin==6.0.1

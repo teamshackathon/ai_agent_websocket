@@ -33,7 +33,7 @@ def hello_ai(request):
 
     return (f"Hello AI. \n <pre>{output}</pre>"), 200
 
-def chat_ai_as_student(request):
+def chats_as_student(request):
 
     # JSONデータを取得
     data = request.get_json()
@@ -92,7 +92,7 @@ def chat_ai_as_student(request):
     return output, 200
 
 
-def chat_ai_as_teacher(request):
+def chats_as_teacher(request):
 
     # JSONデータを取得
     data = request.get_json()
@@ -240,12 +240,10 @@ def create_questions(request):
     if err:
         return error_response(400, 'SETTING_ERROR', err)
 
-    questions_data = create_questions_from_vector(db, start_page, finish_page)
-
     # 小テスト格納フィールド名
     field_name = "questions_draft"
-    json_questions = json.loads(questions_data)
-    Firestore.set_field(reference, field_name, json_questions)
+    questions_data = create_questions_from_vector(db, start_page, finish_page)
+    Firestore.set_field(reference, field_name, questions_data)
 
     # TODO Notice実装予定
 
@@ -263,9 +261,9 @@ def answered_questions(request):
     dict_ref = parse_path(str(reference))
     dict_ref_field = Firestore.to_dict(reference)
 
-    dict_answers = dict_ref_field.get('answers')
+    dict_answers = dict_ref_field.get('questions_answer')
     if dict_answers is None:
-        return error_response(400, 'INPUT_ERROR', "cant find answers field.")
+        return error_response(400, 'INPUT_ERROR', "cant find questions_answer field.")
 
     dict_agenda, err = prepare_agenda(dict_ref)
     if err:
@@ -279,21 +277,19 @@ def answered_questions(request):
     if err:
         return error_response(400, 'SETTING_ERROR', err)
 
-    results_data = create_results_from_vector(db, dict_questions, dict_answers)
+    result_data = create_questions_result_from_vector(db, dict_questions, dict_answers)
 
     # 小テスト採点結果格納フィールド名
     result_field_name = "questions_result"
-    json_results = json.loads(results_data)
-    Firestore.set_field(reference, result_field_name, json_results)
+    Firestore.set_field(reference, result_field_name, result_data)
 
-    homework_data = create_homework_from_vector(dict_agenda, dict_questions, results_data)
+    homeworks_data = create_homeworks_from_vector(dict_agenda, dict_questions, result_data)
 
     # 宿題格納フィールド名
-    homework_field_name = "homework"
-    json_homework = json.loads(homework_data)
-    Firestore.set_field(reference, homework_field_name, json_homework)
+    homeworks_field_name = "homeworks"
+    Firestore.set_field(reference, homeworks_field_name, homeworks_data)
 
-    return created_response(reference, questions_result=result_field_name, homework=homework_field_name)
+    return created_response(reference, questions_result=result_field_name, homeworks=homeworks_field_name)
 
 
 def submit_homework(request):
@@ -307,11 +303,11 @@ def submit_homework(request):
     dict_ref = parse_path(str(reference))
     dict_ref_field = Firestore.to_dict(reference)
 
-    dict_answers = dict_ref_field.get('homework_answers')
-    if dict_answers is None:
-        return error_response(400, 'INPUT_ERROR', "cant find homework_answers field.")
+    dict_homeworks_answer = dict_ref_field.get('homeworks_answer')
+    if dict_homeworks_answer is None:
+        return error_response(400, 'INPUT_ERROR', "cant find homeworks_answer field.")
 
-    dict_homework, err = prepare_homework(dict_ref)
+    dict_homeworks, err = prepare_homeworks(dict_ref)
     if err:
         return error_response(400, 'SETTING_ERROR', err)
 
@@ -319,14 +315,13 @@ def submit_homework(request):
     if err:
         return error_response(400, 'SETTING_ERROR', err)
 
-    results_data = create_homework_results_from_vector(db, dict_homework, dict_answers)
+    homeworks_result = create_homeworks_result_from_vector(db, dict_homeworks, dict_homeworks_answer)
 
     # 小テスト採点結果格納フィールド名
-    result_field_name = "homework_result"
-    json_results = json.loads(results_data)
-    Firestore.set_field(reference, result_field_name, json_results)
+    result_field_name = "homeworks_result"
+    Firestore.set_field(reference, result_field_name, homeworks_result)
 
-    return created_response(reference, homework_result=result_field_name)
+    return created_response(reference, homeworks_result=result_field_name)
 
 
 ### langchain functions ###
@@ -383,9 +378,10 @@ def create_agenda_from_vector(db, start_page, finish_page):
 
     query = f"今回の授業は{start_page}ページから{finish_page}ページを学習します。授業時間は40分です。授業のアジェンダを作成してください。"
     # Json形式のアジェンダ作成
-    json_agenda = chain.invoke(query)
+    agenda_data = chain.invoke(query)
+    print(agenda_data, flush=True)
 
-    return json_agenda
+    return agenda_data
 
 
 def create_questions_from_vector(db, start_page, finish_page):
@@ -410,11 +406,11 @@ def create_questions_from_vector(db, start_page, finish_page):
     {rule}
     """
 
-    問題定義:"""
+    出力形式:"""
     {schema}
     """
 
-    問題定義の出力例:"""
+    出力例:"""
     {schema_sample}
     """
     ''')
@@ -429,14 +425,15 @@ def create_questions_from_vector(db, start_page, finish_page):
             | replaced2json
     )
 
-    query = f"授業の小テストを作成します。`文脈`の**page {start_page}**から**page {finish_page}**の内容を元に問題を**4題**作成してください。問題の重要度を鑑みて`問題定義`の`score`の点数設定をしてください。"
+    query = f"授業の小テストを作成します。`文脈`の**page {start_page}**から**page {finish_page}**の内容を元に問題を**4題以上**作成してください。問題の重要度を鑑みて`出力形式`の`score`の点数設定をしてください。"
     # Json形式の小テスト作成
     questions_data = chain.invoke(query)
+    print(questions_data, flush=True)
 
-    return questions_data
+    return format_json(questions_data, key="questions")
 
 
-def create_results_from_vector(db, dict_questions, dict_answers):
+def create_questions_result_from_vector(db, dict_questions, dict_answers):
     retriever = db.as_retriever()
 
     questions_runnable = RunnableLambda(lambda x: dict_questions)  # 小テスト問題内容（小テストの正解・得点を使用する）
@@ -491,11 +488,12 @@ def create_results_from_vector(db, dict_questions, dict_answers):
     query = f"`問題`の内容（正解、得点）元に`採点ルール`に基づき、`学生の回答`を採点してください。\n採点結果は`採点定義`の形式で出力してください。"
     # Json形式の採点結果作成
     results_data = chain.invoke(query)
+    print(results_data, flush=True)
 
-    return results_data
+    return format_json(results_data, key="results")
 
 
-def create_homework_from_vector(dict_agenda, dict_questions, dict_results):
+def create_homeworks_from_vector(dict_agenda, dict_questions, dict_results):
     agenda_runnable = RunnableLambda(lambda x: dict_agenda) # 授業のアジェンダ
     questions_runnable = RunnableLambda(lambda x: dict_questions) # 小テスト問題内容（小テストの正解・得点を使用する）
     results_runnable = RunnableLambda(lambda x: dict_results) # 小テスト採点結果
@@ -549,11 +547,12 @@ def create_homework_from_vector(dict_agenda, dict_questions, dict_results):
     query = f"`採点結果`から回答者の苦手な分野を特定し、その分野を克服できるような宿題を作成してください。"
     # Json形式の採点結果作成
     homework_data = chain.invoke(query)
+    print(homework_data, flush=True)
 
-    return homework_data
+    return format_json(homework_data, key="questions")
 
 
-def create_homework_results_from_vector(db, dict_homework, dict_answers):
+def create_homeworks_result_from_vector(db, dict_homework, dict_answers):
     retriever = db.as_retriever()
 
     homework_runnable = RunnableLambda(lambda x: dict_homework) # 宿題内容（宿題の正解・得点を使用する）
@@ -608,8 +607,9 @@ def create_homework_results_from_vector(db, dict_homework, dict_answers):
     query = f"`問題`の内容（正解、得点）元に`採点ルール`に基づき、`学生の回答`を採点してください。\n採点結果は`採点定義`の形式で出力してください。"
     # Json形式の採点結果作成
     homework_data = chain.invoke(query)
+    print(homework_data, flush=True)
 
-    return homework_data
+    return format_json(homework_data, key="results")
 
 
 @chain
@@ -681,17 +681,17 @@ def prepare_questions(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
 
     return dict_questions, None
 
-def prepare_homework(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
+def prepare_homeworks(dict_ref) -> Union[tuple[Dict, None], tuple[None, str]]:
     student_path = "/".join([dict_ref.get('year',''), dict_ref.get('class',''), 'common', dict_ref.get('subject',''), 'lessons', dict_ref.get('lesson_id',''), 'students', dict_ref.get('student')])
     dict_field = Firestore.to_dict(student_path)
 
     if not dict_field:
         return None, "cant find student."
 
-    dict_homework = dict_field.get('homework')
+    dict_homework = dict_field.get('homeworks')
 
     if dict_homework is None:
-        return None, "cant find homework."
+        return None, "cant find homeworks."
 
     return dict_homework, None
 
@@ -741,6 +741,20 @@ def restore_chroma(storage_path, persist_directory):
         unzip_file(file_path, persist_directory)
 
 ### Utility Functions ###
+
+def format_json(data, key=None):
+    '''
+    JSON文字列をオブジェクトにして返す。
+    キーが指定されている場合はキーは以下を返す
+    :param data: JSON文字列
+    :param key: キー名
+    :return: オブジェクト
+    '''
+    obj = json.loads(data)
+    if not key: return obj
+    if isinstance(obj, list): return obj
+    if isinstance(obj, dict): return obj.get(key)
+    return obj
 
 def zip_directory(directory_path, zip_name):
     # zipファイルを作成
@@ -795,8 +809,7 @@ def parse_chat_path(path):
 
     return dict_path
 
-def created_response(reference, agenda=None, questions=None, results=None,
-                     questions_result=None, homework=None, homework_result=None):
+def created_response(reference, agenda=None, questions=None, questions_result=None, homeworks=None, homeworks_result=None):
     response = {}
     response['reference'] = reference
 
@@ -805,14 +818,12 @@ def created_response(reference, agenda=None, questions=None, results=None,
         field['agenda'] = agenda
     if questions is not None:
         field['questions'] = questions
-    if results is not None:
-        field['results'] = results
     if questions_result is not None:
         field['questions_result'] = questions_result
-    if homework is not None:
-        field['homework'] = homework
-    if homework_result is not None:
-        field['homework_result'] = homework_result
+    if homeworks is not None:
+        field['homeworks'] = homeworks
+    if homeworks_result is not None:
+        field['homeworks_result'] = homeworks_result
     response['field'] = field
 
     return response, 200
