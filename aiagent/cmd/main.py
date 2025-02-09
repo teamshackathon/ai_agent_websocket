@@ -66,6 +66,6 @@ def handle_request(request):
     print(f"{request.method} [{request.path}] Start.", flush=True)
 
 if __name__ == '__main__':
-    app.debug = True
+    app.debug = False
     app.run(host='0.0.0.0', port=os.getenv("SERVICE_PORT"))
 

@@ -745,7 +745,7 @@ def restore_chroma(storage_path, persist_directory):
 def format_json(data, key=None):
     '''
     JSON文字列をオブジェクトにして返す。
-    キーが指定されている場合はキーは以下を返す
+    キーが指定されている場合はキー配下を返す
     :param data: JSON文字列
     :param key: キー名
     :return: オブジェクト

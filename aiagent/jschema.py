@@ -235,7 +235,7 @@ SCHEMA_ANSWERS = '''{
     }
 }'''
 
-ANSWERS_SUMPLE = '''{
+ANSWERS_SAMPLE = '''{
     "answers": [
         {
             "title": "Canの否定形",
@@ -281,14 +281,19 @@ SCHEMA_RESULTS = '''{
             "minLength": 1,
             "maxLength": 100
           },
-	        "correct_answer": {
-	            "type": "string",
-	            "minLength": 1,
-	            "maxLength": 100
-	        },
-	        "correct_num": {
-	            "type": "number"
-	        }
+          "correct_answer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+	      "correct_num": {
+	        "type": "number"
+	      },
+	      "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
         }
       }
     }
@@ -302,7 +307,7 @@ RESULTS_SAMPLE = '''{
       "correct": true,
       "user_answer": "read",
       "correct_answer": "read",
-      "discription": "動詞とは（参照：1ページ）"
+      "description": "動詞とは（参照：1ページ）"
     },
     {
       "title": "疑問文の作り方",
@@ -310,21 +315,21 @@ RESULTS_SAMPLE = '''{
       "user_answer": "He is a teacher?",
       "correct_answer": "Is he a teacher?",
       "correct_num": 1,
-      "discription": "疑問文とは（参照：5ページ）"
+      "description": "疑問文とは（参照：5ページ）"
     },
     {
       "title": "名詞の複数形",
       "correct": true,
       "user_answer": "cats",
       "correct_answer": "cats",
-      "discription": "名詞の複数形とは（参照：8ページ）"
+      "description": "名詞の複数形とは（参照：8ページ）"
     },
     {
       "title": "時間の表現",
       "correct": false,
       "user_answer": "one",
       "correct_answer": "three",
-      "discription": "時間の表現とは（参照：15ページ）"
+      "description": "時間の表現とは（参照：15ページ）"
     }
   ]
 }'''

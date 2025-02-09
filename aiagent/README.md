@@ -33,6 +33,7 @@ export PYTHONPATH=. &&\
 export GOOGLE_API_KEY=$(cat cert/google_gemini.pem) &&\
 export LANGCHAIN_API_KEY=$(cat cert/langchain.pem) &&\
 export $(sed 's/host.docker.internal/localhost/g' .env.develop | xargs) &&\
+sed -i '' 's/app.debug = False/app.debug = True/' cmd/main.py &&\
 python cmd/main.py
 ```
 
@@ -42,6 +43,7 @@ python cmd/main.py
 
 ```bash
 export $(cat .env.production | xargs) &&\
+sed -i '' 's/app.debug = True/app.debug = False/' cmd/main.py &&\
 gcloud builds submit --tag gcr.io/$GOOGLE_PROJECT_ID/aiagent-app .
 ```
 
