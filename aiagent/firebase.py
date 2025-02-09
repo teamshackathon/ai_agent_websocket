@@ -18,12 +18,20 @@ class Firestorage:
         blob = bucket.blob(blob_path)
         return blob.download_as_bytes()
 
-    def put_file(blob_path, filename):
+    def put_file(blob_path, filename, content_type='application/octet-stream'):
         name = hostname
         bucket = storage.bucket(name)
         # バケットにBlobをアップロード
         blob = bucket.blob(blob_path)
-        blob.upload_from_filename(filename)
+        # 拡張子からContent-Typeを類推
+        blob.upload_from_filename(filename, content_type=content_type)
+
+    def put_bytes(blob_path, buf, content_type='application/octet-stream'):
+        filename = f"/tmp/file.bin"
+        # バイナリモードでファイルを開く
+        with open(filename, 'wb') as file:
+            file.write(buf)
+        Firestorage.put_file(blob_path, filename, content_type=content_type)
 
 class Firestore:
     # パス階層に応じて処理を行う関数

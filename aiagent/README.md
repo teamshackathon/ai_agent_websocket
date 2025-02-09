@@ -71,3 +71,13 @@ gcloud projects add-iam-policy-binding $GOOGLE_PROJECT_ID \
 ```bash
 gsutil cors set cors.json gs://manabiyaai.firebasestorage.app
 ```
+
+## ランダム回答デバック (ローカル環境)
+
+```bash
+export PYTHONPATH=. &&\
+export GOOGLE_API_KEY=$(cat cert/google_gemini.pem) &&\
+export LANGCHAIN_API_KEY=$(cat cert/langchain.pem) &&\
+export $(sed 's/host.docker.internal/localhost/g' .env.develop | xargs) &&\
+python main.py
+```

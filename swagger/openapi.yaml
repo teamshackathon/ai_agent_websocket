@@ -94,7 +94,7 @@ paths:
               notice: ["nama.nama", "name.name", "name.name", "namae.nmamae"]
       responses:
         '200':
-          description: Return resume data path.
+          description: Return agenda_draft data path.
           content:
             application/json:
               schema:
@@ -128,7 +128,7 @@ paths:
               notice: ["nama.nama", "name.name", "name.name", "namae.nmamae"]
       responses:
         '200':
-          description: Return test data path.
+          description: Return questions_draft data path.
           content:
             application/json:
               schema:
@@ -162,7 +162,7 @@ paths:
               notice: ["nama.nama", "souta.hasegawa"]
       responses:
         '200':
-          description: Return test data path.
+          description: Return questions_result and homework data path.
           content:
             application/json:
               schema:
@@ -196,7 +196,7 @@ paths:
               notice: ["nama.nama", "souta.hasegawa"]
       responses:
         '200':
-          description: Return test data path.
+          description: Return homework data path.
           content:
             application/json:
               schema:
@@ -205,6 +205,39 @@ paths:
                 reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/students/souta.hasegawa"
                 feilds: {
                   homework_result: "homework_result"
+                }
+        default:
+          description: unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /create_summary:
+    post:
+      description: |
+        As soon as the teacher completes the questions, it will make a request to analyze the questions.
+      operationId: cmd_create_summary
+      parameters: []
+      requestBody:
+        description: Summarize quizzes and create analysis results.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefrenceRequest'
+            example:
+              reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau"
+              notice: ["nama.nama", "souta.hasegawa"]
+      responses:
+        '200':
+          description: Return summary data path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateResult'
+              example:
+                reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/students/souta.hasegawa"
+                feilds: {
+                  summary: "summary"
                 }
         default:
           description: unexpected error.

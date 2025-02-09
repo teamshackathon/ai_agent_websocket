@@ -6,6 +6,10 @@ WORKDIR /app
 
 ENV PYTHONPATH=/app
 
+# フォントインストール
+RUN apt update && \
+    apt install -y fonts-ipafont-gothic
+
 # pipのアップグレード
 RUN pip install --upgrade pip
 # 必要なパッケージをインストール

@@ -3,6 +3,7 @@ from flask_cors import CORS
 
 import os
 from func import *
+from analysis import create_summary
 
 app = Flask(__name__)
 CORS(app)
@@ -61,6 +62,11 @@ def cmd_test_copy_field():
 @app.route('/test_show_field', methods=['POST'])
 def cmd_test_show_field():
     return test_show_field(request)
+
+@app.route('/create_summary', methods=['POST'])
+def cmd_create_summary():
+    handle_request(request)
+    return create_summary(request)
 
 def handle_request(request):
     print(f"{request.method} [{request.path}] Start.", flush=True)
