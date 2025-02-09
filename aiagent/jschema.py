@@ -291,12 +291,6 @@ SCHEMA_RESULTS = '''{
 	        }
         }
       }
-    },
-    "total_score": {
-      "type": "number"
-    },
-    "max_score": {
-      "type": "number"
     }
   }
 }'''
@@ -332,7 +326,5 @@ RESULTS_SAMPLE = '''{
       "correct_answer": "three",
       "discription": "時間の表現とは（参照：15ページ）"
     }
-  ],
-  "total_score": 50,
-  "max_score": 100
+  ]
 }'''

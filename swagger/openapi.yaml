@@ -17,11 +17,11 @@ paths:
           content:
             plain/text:
               example: Hello AI.
-  /chat_ai_as_student:
+  /chats_as_student:
     post:
       description: |
         Let AI answer questions from students.
-      operationId: cmd_chat_ai_as_student
+      operationId: cmd_chats_as_student
       parameters: []
       requestBody:
         description: chat messages reference.
@@ -46,11 +46,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /chat_ai_as_teacher:
+  /chats_as_teacher:
     post:
       description: |
         Let AI answer questions from teature.
-      operationId: cmd_chat_ai_as_teacher
+      operationId: cmd_chats_as_teacher
       parameters: []
       requestBody:
         description: chat messages reference.
@@ -158,7 +158,7 @@ paths:
             schema:
               $ref: '#/components/schemas/RefrenceRequest'
             example:
-              reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/student/souta.hasegawa/souta.hasegawa"
+              reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/student/souta.hasegawa"
               notice: ["nama.nama", "souta.hasegawa"]
       responses:
         '200':
@@ -168,7 +168,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateResult'
               example:
-                reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/student/souta.hasegawa/souta.hasegawa"
+                reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/student/souta.hasegawa"
                 feilds: {
                   questions_result: "questions_result",
                   homework: "homework"
