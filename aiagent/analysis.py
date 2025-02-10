@@ -97,6 +97,7 @@ def background_process(data, reference, dict_agenda, dict_questions):
     if notices:
         dict_lesson = lesson_info(dict_ref)
         for notice in notices:
+            print(f"[create_summary] notice: {notice}", flush=True)
             dict_teacher = Firestore.to_dict(f"teachers/{notice}")
 
             message = f"""
