@@ -1,31 +1,36 @@
 import base64
-import zipfile
-import shutil
-import os
 import json
+import os
 import re
+import shutil
+import zipfile
 from typing import Dict, Union
+from datetime import datetime
 
+from google.cloud import aiplatform
 import google.generativeai as genai
+from chromadb import PersistentClient
 from langchain_chroma import Chroma
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough, chain
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough, chain
 from langchain_google_genai import GoogleGenerativeAI, GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_text_splitters import CharacterTextSplitter
-
 from pydantic import BaseModel, Field
-from chromadb import PersistentClient
 
-import jschema
 import jprompt
+import jschema
 from firebase import Firestore, Firestorage
+
 
 class Recipe(BaseModel):
     ingredients: list[str] = Field(description="ingredients of the dish")
     steps: list[str] = Field(description="steps to make the dish")
 
 output_parser = PydanticOutputParser(pydantic_object=Recipe)
+
+# Vertex AI の初期化
+aiplatform.init(project=os.getenv('GOOGLE_PROJECT_ID'), location="asia-northeast1")
 
 def hello_ai(request):
     model = GoogleGenerativeAI(model="gemini-2.0-flash-exp")
@@ -35,7 +40,6 @@ def hello_ai(request):
     return (f"Hello AI. \n <pre>{output}</pre>"), 200
 
 def chats_as_student(request):
-
     # JSONデータを取得
     data = request.get_json()
 
@@ -45,15 +49,13 @@ def chats_as_student(request):
     
     dict_ref = parse_chat_path(str(reference))
 
-    chats_path = dict_ref['chats'] + '/' + dict_ref['chatId'] + '/messages'
-    print(chats_path, flush=True)
+    chats_path = "/".join(['chats', dict_ref['chatId'], 'messages'])
+    print(f"chat path: {chats_path}", flush=True)
+
     # ドキュメントを取得
     list_doc = Firestore.to_list(chats_path)
-    
     if list_doc is None or len(list_doc) == 0:
-        return error_response(400, '_ERROR', "Nothing found in the path.")
-
-    print(list_doc, flush=True)
+        return error_response(400, 'INPUT_ERROR', "Nothing found in the path.")
 
     # 配列の中身をintに変換
     list_doc = [int(i) for i in list_doc]
@@ -68,7 +70,7 @@ def chats_as_student(request):
         doc_dict = Firestore.to_dict(doc_path)
         print(doc_dict, flush=True)
         if doc_dict is not None:
-            context.append(f"{doc_dict['senderId']}:"+doc_dict['text'] + f"{doc_dict['messageId']}に送信")
+            context.append(f"{doc_dict['senderId']}:{doc_dict['text']}{doc_dict['messageId']}に送信")
 
     context = '\n'.join(context)
 
@@ -77,24 +79,29 @@ def chats_as_student(request):
     今までの会話は以下の通りです。
     """ + context
 
+    # モデルの指定
+    #model = aiplatform.Model("gemini-2.0-flash-exp")
+    # テキスト生成の実行
+    #response = model.predict(prompt=prompt)
+    #output = response.predictions[0].text
 
     model = GoogleGenerativeAI(model="gemini-2.0-flash-exp")
     output = model.invoke(prompt)
-    from datetime import datetime
+
     # 新規メッセージの作成
     doc_id = str(int(datetime.now().timestamp() * 1000))
 
-    Firestore.set_field(chats_path + "/" + doc_id, "messageId", doc_id)
-    Firestore.set_field(chats_path + "/" + doc_id, "senderId", "ManabiyaAI")
-    Firestore.set_field(chats_path + "/" + doc_id, "text", output)
-    Firestore.set_field(chats_path + "/" + doc_id, "createdAt", datetime.now())
-    Firestore.set_field(chats_path + "/" + doc_id, "read", False)
+    doc_path = chats_path + "/" + doc_id
+    Firestore.set_field(doc_path, "messageId", doc_id)
+    Firestore.set_field(doc_path, "senderId", "ManabiyaAI")
+    Firestore.set_field(doc_path, "text", output)
+    Firestore.set_field(doc_path, "createdAt", datetime.now())
+    Firestore.set_field(doc_path, "read", False)
 
     return output, 200
 
 
 def chats_as_teacher(request):
-
     # JSONデータを取得
     data = request.get_json()
 
@@ -104,15 +111,13 @@ def chats_as_teacher(request):
     
     dict_ref = parse_chat_path(str(reference))
 
-    chats_path = dict_ref['chats'] + '/' + dict_ref['chatId'] + '/messages'
-    print(chats_path, flush=True)
+    chats_path = "/".join(['chats', dict_ref['chatId'], 'messages'])
+    print(f"chat path: {chats_path}", flush=True)
+
     # ドキュメントを取得
     list_doc = Firestore.to_list(chats_path)
-    
     if list_doc is None or len(list_doc) == 0:
         return error_response(400, '_ERROR', "Nothing found in the path.")
-
-    print(list_doc, flush=True)
 
     # 配列の中身をintに変換
     list_doc = [int(i) for i in list_doc]
@@ -127,7 +132,7 @@ def chats_as_teacher(request):
         doc_dict = Firestore.to_dict(doc_path)
         print(doc_dict, flush=True)
         if doc_dict is not None:
-            context.append(f"{doc_dict['senderId']}:"+doc_dict['text'] + f"{doc_dict['messageId']}に送信")
+            context.append(f"{doc_dict['senderId']}:{doc_dict['text']}{doc_dict['messageId']}に送信")
 
     context = '\n'.join(context)
 
@@ -136,18 +141,24 @@ def chats_as_teacher(request):
     今までの会話は以下の通りです。
     """ + context
 
+    # モデルの指定
+    #model = aiplatform.Model("gemini-1.5-pro-001")
+    # テキスト生成の実行
+    #response = model.predict(prompt=prompt)
+    #output = response.predictions[0].text
 
     model = GoogleGenerativeAI(model="gemini-2.0-flash-exp")
     output = model.invoke(prompt)
-    from datetime import datetime
+
     # 新規メッセージの作成
     doc_id = str(int(datetime.now().timestamp() * 1000))
 
-    Firestore.set_field(chats_path + "/" + doc_id, "messageId", doc_id)
-    Firestore.set_field(chats_path + "/" + doc_id, "senderId", "ManabiyaAI")
-    Firestore.set_field(chats_path + "/" + doc_id, "text", output)
-    Firestore.set_field(chats_path + "/" + doc_id, "createdAt", datetime.now())
-    Firestore.set_field(chats_path + "/" + doc_id, "read", False)
+    doc_path = chats_path + "/" + doc_id
+    Firestore.set_field(doc_path, "messageId", doc_id)
+    Firestore.set_field(doc_path, "senderId", "ManabiyaAI")
+    Firestore.set_field(doc_path, "text", output)
+    Firestore.set_field(doc_path, "createdAt", datetime.now())
+    Firestore.set_field(doc_path, "read", False)
 
     return output, 200
     
@@ -842,82 +853,45 @@ def error_response(code, type, message):
         "message": message
     }, code
 
-### Test Functions ###
 
-def test_firebase(request):
-    path = request.args.get('path')
-    list = Firestore.to_list(path)
-    dict = Firestore.to_dict(path)
-    print(f"Returned: {list}, {dict}", flush=True)
-    return "OK", 200
+### Notification Utils ###
 
-def test_zip(request):
-    zip_directory("/tmp/chroma", "/tmp/chroma.zip")
-    shutil.rmtree("/tmp/chroma")
-    unzip_file("/tmp/chroma.zip", "/tmp/chroma")
-    return "OK", 200
+def notification(notice, title, send_text):
+    '''
+    通知の送信
+    :param notice: 通知送付先
+    :param title: 通知タイトル
+    :param send_text: メッセージ内容
+    '''
+    # ランダムに文字列を生成
+    import random, string
+    from datetime import datetime
+    notice_id = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+    notice_path = f"notice/{notice_id}"
 
-def test_store_value(request):
-    # JSONデータを取得
-    data = request.get_json()
+    Firestore.set_field(notice_path, 'folderName', notice)
+    Firestore.set_field(notice_path, 'publisher', "ManabiyaAI")
+    Firestore.set_field(notice_path, 'title', title)
+    Firestore.set_field(notice_path, 'text', send_text)
+    Firestore.set_field(notice_path, 'read', False)
+    Firestore.set_field(notice_path, 'room', "")
+    Firestore.set_field(notice_path, 'timeStamp', datetime.now())
 
-    reference = data.get('reference')
-    if reference is None:
-        return error_response(400, 'INPUT_ERROR', "reference is required.")
+def lesson_info(dict_ref):
+    lesson_path = "/".join([dict_ref.get('year',''), dict_ref.get('class',''), 'common', dict_ref.get('subject',''), 'lessons', dict_ref.get('lesson_id','')])
+    dict_lesson = Firestore.to_dict(lesson_path)
 
-    key = data.get('key')
-    if key is None:
-        return error_response(400, 'INPUT_ERROR', "key is required.")
+    subject = dict_ref.get('subject')
 
-    value = data.get('value')
-    if value is None:
-        return error_response(400, 'INPUT_ERROR', "value is required.")
+    subject_name = "教科名"
+    if subject == "english": subject_name = "英語"
+    elif subject == "japanese": subject_name = "国語"
+    elif subject == "math": subject_name = "数字"
+    elif subject == "science": subject_name = "理科"
+    elif subject == "social": subject_name = "社会"
 
-    Firestore.set_field(reference, key, value)
-    return "OK", 200
-
-
-def test_copy_field(request):
-    # JSONデータを取得
-    data = request.get_json()
-
-    reference = data.get('reference')
-    if reference is None:
-        return error_response(400, 'INPUT_ERROR', "reference is required.")
-
-    fromKey = data.get('fromKey')
-    if fromKey is None:
-        return error_response(400, 'INPUT_ERROR', "fromKey is required.")
-
-    toKey = data.get('toKey')
-    if toKey is None:
-        return error_response(400, 'INPUT_ERROR', "toKey is required.")
-
-    dict_field = Firestore.to_dict(reference)
-    if not dict_field:
-        return error_response(400, 'INPUT_ERROR', "not exist reference.")
-
-    dict_fromKey = dict_field.get(fromKey)
-    if not dict_fromKey:
-        return error_response(400, 'INPUT_ERROR', "not exist fromKey field.")
-
-    Firestore.set_field(reference, toKey, dict_fromKey)
-    return "OK", 200
-
-def test_show_field(request):
-    # JSONデータを取得
-    data = request.get_json()
-
-    reference = data.get('reference')
-    if reference is None:
-        return error_response(400, 'INPUT_ERROR', "reference is required.")
-
-    key = data.get('key')
-    if key is None:
-        return error_response(400, 'INPUT_ERROR', "key is required.")
-
-    dict_field = Firestore.to_dict(reference)
-    if not dict_field:
-        return error_response(400, 'INPUT_ERROR', "not exist reference.")
-
-    return json.dumps(dict_field.get(key, []), ensure_ascii=False, sort_keys=True), 200
+    dict_lesson['subject_name'] = subject_name
+    dict_lesson['lesson_year'] = f"{dict_ref.get('year')}年度"
+    dict_lesson['lesson_class'] = f"{dict_ref.get('class').replace('-', '年')}組"
+    dict_lesson['lesson_count'] = f"第{dict_lesson.get('count')}回"
+    return dict_lesson

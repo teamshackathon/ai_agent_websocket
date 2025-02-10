@@ -235,10 +235,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateResult'
               example:
-                reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau/students/souta.hasegawa"
-                feilds: {
-                  summary: "summary"
-                }
+                reference: "2023/1-1/common/english/lessons/ayiiF5ZAkPKCV6Y99Dau"
         default:
           description: unexpected error.
           content:
