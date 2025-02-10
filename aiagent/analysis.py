@@ -43,6 +43,12 @@ def create_summary(request):
     if err:
         return error_response(400, 'SETTING_ERROR', err)
 
+    notices = data.get('notice')
+    if notices and isinstance(notices, list):
+        for notice in notices:
+            print(f"[create_summary] prepare notice: {notice}", flush=True)
+            notification(notice, "小テストの集計を受け付けました", "小テストの集計・分析結果が作成されるまで今しばらくお待ち下さい。")
+
     # バックグラウンドで処理を実行
     threading.Thread(target=background_process, args=(data, reference, dict_agenda, dict_questions)).start()
 
@@ -102,7 +108,7 @@ def background_process(data, reference, dict_agenda, dict_questions):
 
             message = f"""
                         {dict_teacher.get('name')}先生
-                        授業お疲れ様でした、いつもありがとうございます。
+                        授業お疲れ様でした。いつもありがとうございます。
                         {dict_lesson.get('lesson_class','担当クラス')}の{dict_lesson.get('subject_name','')}小テスト（{dict_lesson.get('lesson_count')}）の回収・分析が完了いたしました。
                         
                         分析結果の詳細につきましては、授業の分析メニューをご確認ください。
@@ -113,7 +119,6 @@ def background_process(data, reference, dict_agenda, dict_questions):
                         よろしくお願いいたします。 @Manabiya AI
                         """
             message = textwrap.dedent(message)[1:-1]
-            print(message, flush=True)
 
             notification(notice, "小テストの集計が完了しました", message)
 
@@ -188,7 +193,7 @@ def create_sample_answers_from_vector(dict_questions):
     query = f"`問題形式`を覚えて、`問題データ`に対する`ランダム回答データ`を作成してください。`ランダム回答データ`の作成は、`ランダム回答ルール`に従ってください。出力結果は`ランダム回答データ`のみとします。"
     # JSON形式のランダム回答結果を作成
     answers_data = chain.invoke(query)
-    #print(answers_data, flush=True)
+    print(answers_data, flush=True)
 
     return answers_data
 
@@ -235,7 +240,7 @@ def create_dummy_result_from_vector(dict_questions, dict_answers):
     query = f"`問題データ`の内容（正解、得点）元に`採点ルール`に基づき、`回答データ`を採点してください。採点結果は`採点定義`のJSON形式で出力してください。"
     # JSON形式のランダム回答結果を作成
     results_data = chain.invoke(query)
-    #print(results_data, flush=True)
+    print(results_data, flush=True)
 
     return results_data
 

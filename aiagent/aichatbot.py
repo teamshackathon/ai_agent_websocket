@@ -1,4 +1,5 @@
 import os
+import textwrap
 from datetime import datetime
 import vertexai
 from vertexai.generative_models import GenerativeModel
@@ -47,10 +48,19 @@ def chats_as_student(request):
 
     chat_history = []
 
-    prompt = """
-    あなたは教師です。そしてこれは生徒とのチャットです。生徒が質問をしてきました。その質問に対して回答してください。
-    今までの会話は以下の通りです。
+    prompt = '''
+    あなた(ManabiyaAI)は教師です。そしてこれは生徒とのチャットです。生徒が質問をしてきました。その質問に対して回答してください。
+    今までの会話の内容を元に回答してください。**回答には話者の情報は含めません。**
+    
+    会話の形式:"""
+    話者: 会話の内容
+    - 出現順で最近の発話
     """
+    
+    -- これまでの会話 --
+    
+    '''
+    prompt = textwrap.dedent(prompt)[1:-1]
     add_to_history(chat_history, "Admin", prompt)
 
     for doc_id in list_doc:
@@ -101,10 +111,19 @@ def chats_as_teacher(request):
 
     chat_history = []
 
-    prompt = """
-    あなたはベテラン教師です。そしてこれは教師とのチャットです。教師が質問をしてきました。その質問に対して回答してください。
-    今までの会話は以下の通りです。
-    """
+    prompt = '''
+    あなた(ManabiyaAI)はベテラン教師です。そしてこれは教師とのチャットです。教師が質問をしてきました。その質問に対して回答してください。
+    今までの会話は以下の通りです。**回答には話者の情報は含めません。**
+
+     会話の形式:"""
+     話者: 会話の内容
+     - 出現順で最近の発話
+     """
+
+     -- これまでの会話 --
+
+     '''
+    prompt = textwrap.dedent(prompt)[1:-1]
     add_to_history(chat_history, "Admin", prompt)
 
     for doc_id in list_doc:
@@ -140,7 +159,6 @@ def get_response_from_ai(history):
     message = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
     print(message, flush=True)
     # チャットの履歴を元にモデルを呼び出す
-    response = chat.send_message([message])
-    bot_message = response.candidates[0].content.parts[0].text
+    response = chat.send_message([message]).text
     # 応答を取得
-    return bot_message
+    return response
