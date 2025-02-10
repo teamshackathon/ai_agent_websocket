@@ -45,8 +45,6 @@ def create_agenda(request):
     if finish_page is None:
         return error_response(400, 'INPUT_ERROR', "finish_page is required.")
 
-    # TODO Noticeパラメータ取得の実装予定
-
     dict_ref = parse_path(str(reference))
     subject_path = dict_ref['year'] + '/' + dict_ref['class'] + '/common/' + dict_ref['subject']
     # ドキュメントを取得
@@ -93,8 +91,6 @@ def create_agenda(request):
     Firestore.set_field(reference, 'start_page', int(start_page))
     Firestore.set_field(reference, 'finish_page', int(finish_page))
 
-    # TODO Notice実装予定
-
     return created_response(reference, agenda=field_name)
 
 
@@ -105,8 +101,6 @@ def create_questions(request):
     reference = data.get('reference')
     if reference is None:
         return error_response(400, 'INPUT_ERROR', "reference is required.")
-
-    # TODO Noticeパラメータ取得の実装予定
 
     dict_ref = parse_path(str(reference))
 
@@ -122,8 +116,6 @@ def create_questions(request):
     field_name = "questions_draft"
     questions_data = create_questions_from_vector(db, start_page, finish_page)
     Firestore.set_field(reference, field_name, questions_data)
-
-    # TODO Notice実装予定
 
     return created_response(reference, questions=field_name)
 
