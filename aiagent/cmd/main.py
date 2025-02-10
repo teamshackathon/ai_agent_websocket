@@ -3,6 +3,7 @@ from flask_cors import CORS
 
 import os
 import func
+import aichatbot
 import analysis
 import debug
 import hashlib
@@ -13,17 +14,17 @@ CORS(app)
 @app.route('/', methods=['GET'])
 def cmd_hello_ai():
     handle_request(request)
-    return func.hello_ai(request)
+    return aichatbot.hello_ai(request)
 
 @app.route('/chats_as_student', methods=['POST'])
 def cmd_chats_as_student():
     handle_request(request)
-    return func.chats_as_student(request)
+    return aichatbot.chats_as_student(request)
 
 @app.route('/chats_as_teacher', methods=['POST'])
 def cmd_chats_as_teacher():
     handle_request(request)
-    return func.chats_as_teacher(request)
+    return aichatbot.chats_as_teacher(request)
 
 @app.route('/create_agenda', methods=['POST'])
 def cmd_create_agenda():
