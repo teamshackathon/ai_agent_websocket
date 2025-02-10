@@ -2,6 +2,8 @@ import io
 import json
 import random
 import time
+import textwrap
+import threading
 import numpy as np
 import matplotlib.patches as mpatches
 import matplotlib
@@ -15,10 +17,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 import jschema
 import jprompt
-from func import error_response, created_response, replaced2json, format_json, prepare_agenda, prepare_questions, parse_path
+from func import error_response, created_response, replaced2json, format_json, prepare_agenda, prepare_questions, parse_path, notification, lesson_info
 from firebase import Firestore, Firestorage
 
-# 日本語フォントを指定
+# 日本語フォントを指定（グラフ画像内日本語用）
 plt.rcParams["font.family"] = "IPAPGothic"
 
 def create_summary(request):
@@ -41,18 +43,29 @@ def create_summary(request):
     if err:
         return error_response(400, 'SETTING_ERROR', err)
 
+    # バックグラウンドで処理を実行
+    threading.Thread(target=background_process, args=(data, reference, dict_agenda, dict_questions)).start()
+
+    return created_response(reference)
+
+
+def background_process(data, reference, dict_agenda, dict_questions):
     # 生徒の採点結果一覧を取得
     list_result = collect_results(reference)
 
     max_sample_num = data.get('max_sample_num')
-    max_sample_num = max(max_sample_num, 10)
-    if max_sample_num and len(list_result) < max_sample_num:
+    if max_sample_num or not isinstance(max_sample_num, int):
+        # デフォルト回答数を設定
+        max_sample_num = 10
+
+    if len(list_result) < max_sample_num:
         # ダミー採点結果を作成
         dummy_results = create_dummy_results(dict_questions, max_sample_num - len(list_result))
         if dummy_results and len(dummy_results) > 0:
             # ダミー採点結果を採点結果一覧に追加
             list_result.extend(dummy_results)
 
+    dict_ref = parse_path(reference)
     # グラフ画像の基底パス
     storage_path = "/".join(["graph_img", dict_ref.get('subject',''), dict_ref.get('lesson_id','')])
 
@@ -60,12 +73,17 @@ def create_summary(request):
     dict_title_rates = make_dictionary_of_correct(list_result)
     # 問題毎の正答数を集計
     dict_title_stats = collect_correct_incorrect(list_result)
+    print(f"[create_summary] collected questions_result. ref:{reference}", flush=True)
+
     # 正答率グラフを生成
     img_path = create_correct_graph(dict_title_rates, storage_path)
     # 問題毎の正答グラフを生成
     dict_img_path = create_correct_graph_by_title(dict_title_stats, storage_path)
+    print(f"[create_summary] created summary graph. ref:{reference}", flush=True)
+
     # 小テストの分析結果を取得
     md_analysis = analysis_questions_result(dict_agenda, dict_questions, dict_title_rates, dict_title_stats)
+    print(f"[create_summary] analysis completed. ref:{reference}", flush=True)
 
     field_name = 'summary'
     dict_summary = {'markdown': md_analysis}
@@ -75,8 +93,30 @@ def create_summary(request):
     # Firestoreに分析結果とグラフ画像パスを格納
     Firestore.set_field(reference, field_name, dict_summary)
 
-    return created_response(reference, summary=field_name)
+    notices = data.get('notice')
+    if notices:
+        dict_lesson = lesson_info(dict_ref)
+        for notice in notices:
+            dict_teacher = Firestore.to_dict(f"teachers/{notice}")
 
+            message = f"""
+                        {dict_teacher.get('name')}先生
+                        授業お疲れ様でした、いつもありがとうございます。
+                        {dict_lesson.get('lesson_class','担当クラス')}の{dict_lesson.get('subject_name','')}小テスト（{dict_lesson.get('lesson_count')}）の回収・分析が完了いたしました。
+                        
+                        分析結果の詳細につきましては、授業の分析メニューをご確認ください。
+                        ご不明な点がございましたら、お気軽にチャットメニューから問い合わせてください。
+                        
+                        引き続き、先生の業務をサポートさせていただきます。
+                        
+                        よろしくお願いいたします。 @Manabiya AI
+                        """
+            message = textwrap.dedent(message)[1:-1]
+            print(message, flush=True)
+
+            notification(notice, "小テストの集計が完了しました", message)
+
+    print(f"[create_summary] finish. ref:{reference}", flush=True)
 
 def collect_results(reference):
     # レッスンは以下の生徒のパス
@@ -309,8 +349,11 @@ def collect_correct_incorrect(list_results):
             title = result.get("title", "")
             is_correct = result.get("correct", False)  # Trueなら正解、Falseなら不正解
             user_answer = result.get("user_answer")
-            if not user_answer:
+
+            if user_answer is None:
                 user_answer = ''
+            elif isinstance(user_answer, int):
+                user_answer = str(user_answer)
 
             # 初めてのタイトルなら、タイトル名、正解、不正解の辞書を初期化
             if title not in dict_title_stats:
